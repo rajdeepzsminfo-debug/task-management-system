@@ -297,14 +297,99 @@ if st.session_state.role == "Admin":
                     st.rerun()
 
     elif menu == "Reports & Overrides":
-        st.title("📊 Global Performance Reports")
+        st.title("📊 Global Performance Reports & Overrides")
+        
+        # Load fresh data
         df = get_tasks()
-        f1, f2 = st.columns(2)
+        
+        # --- FILTERS ---
+        f1, f2, f3 = st.columns(3)
         c_filt = f1.multiselect("Filter by Company", COMPANY_LIST)
         e_filt = f2.multiselect("Filter by Employee", get_users()['Username'].tolist())
+        s_filt = f3.multiselect("Filter by Status", ["Pending", "Running", "Paused", "Finished"])
+        
         if c_filt: df = df[df['Company'].isin(c_filt)]
         if e_filt: df = df[df['Employee'].isin(e_filt)]
-        st.dataframe(df.drop(columns=['Assign_DT']), use_container_width=True)
+        if s_filt: df = df[df['Status'].isin(s_filt)]
+
+        if df.empty:
+            st.info("No tasks match these filters.")
+        else:
+            # Display Headers for the custom table
+            h1, h2, h3, h4, h5 = st.columns([2, 3, 2, 2, 2])
+            h1.write("**Employee/Company**")
+            h2.write("**Task Description**")
+            h3.write("**Status/Mins**")
+            h4.write("**Time Info**")
+            h5.write("**Actions**")
+            st.divider()
+
+            for idx, row in df.iterrows():
+                col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 2, 2])
+                
+                # Column 1: Who & Where
+                col1.write(f"👤 {row['Employee']}")
+                col1.caption(f"🏢 {row['Company']}")
+                
+                # Column 2: Task
+                col2.write(row['Task'])
+                
+                # Column 3: Status & Limit
+                status_color = {"Pending": "⚪", "Running": "🔵", "Paused": "🟡", "Finished": row['Flag']}
+                col3.write(f"{status_color.get(row['Status'], '⚪')} {row['Status']}")
+                col3.write(f"⏱️ {row['Limit_Mins']} mins")
+                
+                # Column 4: Time Details
+                col4.caption(f"Assigned: {row['Assign_Time']}")
+                if row['Submit_Time'] != "N/A":
+                    col4.caption(f"Submitted: {row['Submit_Time']}")
+
+                # Column 5: Action Buttons
+                edit_btn = col5.button("✏️ Edit", key=f"edit_task_{idx}")
+                del_btn = col5.button("🗑️ Delete", key=f"del_task_{idx}")
+
+                # --- DELETE LOGIC ---
+                if del_btn:
+                    full_df = get_tasks() # Get latest
+                    full_df = full_df.drop(idx)
+                    save_tasks(full_df)
+                    st.toast("Task deleted successfully!")
+                    time.sleep(1)
+                    st.rerun()
+
+                # --- EDIT LOGIC (Inline Form) ---
+                if st.session_state.get(f"is_editing_{idx}", False):
+                    with st.container(border=True):
+                        st.write(f"**Modifying Task for {row['Employee']}**")
+                        new_mins = st.number_input("Change Minutes Allowed", min_value=1, value=int(float(row['Limit_Mins'])), key=f"new_min_{idx}")
+                        new_status = st.selectbox("Change Status", ["Pending", "Running", "Paused", "Finished"], index=["Pending", "Running", "Paused", "Finished"].index(row['Status']), key=f"new_stat_{idx}")
+                        
+                        c_save, c_cancel = st.columns(2)
+                        if c_save.button("💾 Save Overrides", key=f"save_over_{idx}"):
+                            full_df = get_tasks()
+                            full_df.at[idx, 'Limit_Mins'] = str(new_mins)
+                            full_df.at[idx, 'Status'] = new_status
+                            
+                            # If admin changes time while task is running, we must recalculate the Deadline
+                            if new_status == "Running" and row['Start_Time'] != "Waiting":
+                                start_dt = to_dt(row['Start_Time'])
+                                if start_dt:
+                                    new_deadline = start_dt + timedelta(minutes=new_mins)
+                                    full_df.at[idx, 'Deadline'] = new_deadline.strftime("%Y-%m-%d %H:%M:%S")
+                            
+                            save_tasks(full_df)
+                            st.session_state[f"is_editing_{idx}"] = False
+                            st.success("Task updated!")
+                            time.sleep(1)
+                            st.rerun()
+                            
+                        if c_cancel.button("Cancel", key=f"cancel_over_{idx}"):
+                            st.session_state[f"is_editing_{idx}"] = False
+                            st.rerun()
+
+                if edit_btn:
+                    st.session_state[f"is_editing_{idx}"] = True
+                    st.rerun()
 
     elif menu == "User Management":
         st.title("👥 User Management")
