@@ -311,37 +311,7 @@ if st.session_state.role == "Admin":
         if c_filt: df = df[df['Company'].isin(c_filt)]
         if e_filt: df = df[df['Employee'].isin(e_filt)]
         if s_filt: df = df[df['Status'].isin(s_filt)]
-        # ==========================================
-        # NEW: EXCEL EXPORT BUTTON
-        # ==========================================
-        if not df.empty:
-            st.write("---")
-            # Create a buffer to hold the excel data
-            import io
-            buffer = io.BytesIO()
-            
-            # Clean the dataframe for export (remove internal columns)
-            export_df = df.copy()
-            if 'Assign_DT' in export_df.columns:
-                export_df = export_df.drop(columns=['Assign_DT'])
-            
-            # Use Pandas to write to Excel
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                export_df.to_excel(writer, index=False, sheet_name='TaskReport')
-            
-            # Create the download button
-            st.download_button(
-                label="📥 Download Report as Excel",
-                data=buffer.getvalue(),
-                file_name=f"Task_Report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-            st.write("---")
-        # ==========================================
-
-        # ... (Rest of your existing code: Headers and for idx, row in df.iterrows():)
-        
+                
         if df.empty:
             st.info("No tasks match these filters.")
         else:
