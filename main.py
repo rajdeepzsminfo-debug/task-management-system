@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import time
+from streamlit_autorefresh import st_autorefresh
 import os
-
 # ==========================================
 # 1. DATABASE SETUP & HELPERS
 # ==========================================
@@ -117,6 +117,17 @@ def to_dt(str_val):
         return datetime.strptime(str_val, "%Y-%m-%d %H:%M:%S")
     except:
         return None
+@st.fragment(run_every="1s")
+def render_timer(deadline_str):
+    deadline_dt = to_dt(deadline_str)
+    if deadline_dt:
+        diff = deadline_dt - datetime.now()
+        secs = int(diff.total_seconds())
+        if secs > 0:
+            st.metric("⏳ Time Remaining", f"{secs//60}m {secs%60}s")
+        else:
+            st.error("⚠️ OVERDUE")
+            st.metric("Time Overdue", f"{abs(secs)//60}m {abs(secs)%60}s")
 
 TASK_COLS = ["Employee", "Company", "Task", "Limit_Mins", "Assign_Time", "Start_Time", 
              "Deadline", "Submit_Time", "Time_Variance", "Status", "Flag", "Pause_Start", 
@@ -129,6 +140,8 @@ for db, cols in {TASK_DB: TASK_COLS, USER_DB: USER_COLS}.items():
 
 def get_tasks(): 
     df = pd.read_csv(TASK_DB).fillna("N/A").astype(str)
+    if "Remarks" not in df.columns:
+        df["Remarks"] = ""
     df['Assign_DT'] = pd.to_datetime(df['Assign_Time'], errors='coerce')
     return df
 
@@ -536,25 +549,55 @@ elif st.session_state.role == "Employee":
                         save_tasks(df); st.rerun()
 
                 elif row["Status"] == "Running":
-                    deadline_dt = to_dt(row["Deadline"])
-                    diff = deadline_dt - datetime.now()
-                    secs = int(diff.total_seconds())
-                    st.metric("Time Remaining", f"{secs//60}m {secs%60}s" if secs > 0 else "OVERDUE")
-                    
+                    # This calls the fragment to tick every second
+                    if not st.session_state.get(f"finish_mode_{idx}", False):
+                        render_timer(row["Deadline"])
+                    else:
+                        st.warning("⚠️ Timer stopped. Waiting for remarks.")  
+
+                    # Indent these lines so they stay inside the 'elif'
                     c1, c2 = st.columns(2)
+                    
                     if c1.button("⏸️ PAUSE", key=f"p_{idx}"):
                         df.at[idx, "Pause_Start"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         df.at[idx, "Status"] = "Paused"
-                        save_tasks(df); st.rerun()
-                    if c2.button("✅ FINISH", key=f"f_{idx}"):
-                        now = datetime.now()
-                        deadline_dt = to_dt(row["Deadline"])
-                        var = int((now - deadline_dt).total_seconds())
+                        save_tasks(df)
+                        st.rerun()
                         
-                        df.at[idx, "Flag"] = "🟢 GREEN" if var <= 0 else "🔴 RED"
-                        df.at[idx, "Submit_Time"] = now.strftime("%Y-%m-%d %H:%M:%S")
-                        df.at[idx, "Time_Variance"] = f"{'+' if var > 0 else '-'}{abs(var)//60:02d}:{abs(var)%60:02d}"
-                        df.at[idx, "Status"] = "Finished"
+                    if c2.button("✅ FINISH", key=f"f_{idx}"):
+                        st.session_state[f"finish_time_{idx}"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        st.session_state[f"finish_mode_{idx}"] = True
+
+                    # --- REMARK INPUT AREA ---
+                    if st.session_state.get(f"finish_mode_{idx}", False):
+                        st.markdown("---")
+                        frozen_time = st.session_state[f"finish_time_{idx}"]
+                        st.write(f"⏱️ Time Captured: **{frozen_time}**")
+                        
+                        remark_input = st.text_area("Final Remarks", key=f"txt_{idx}", placeholder="Enter task details or reason for delay...")
+                        
+                        sub_c1, sub_c2 = st.columns(2)
+                        
+                        if sub_c1.button("Confirm Submit", key=f"save_{idx}", type="primary"):
+                            finish_dt = to_dt(frozen_time)
+                            deadline_dt = to_dt(row["Deadline"])
+                            var = int((finish_dt - deadline_dt).total_seconds())
+                            
+                            df.at[idx, "Flag"] = "🟢 GREEN" if var <= 0 else "🔴 RED"
+                            df.at[idx, "Submit_Time"] = frozen_time
+                            df.at[idx, "Time_Variance"] = f"{'+' if var > 0 else '-'}{abs(var)//60:02d}:{abs(var)%60:02d}"
+                            df.at[idx, "Status"] = "Finished"
+                            df.at[idx, "Remarks"] = remark_input # This saves the text
+                            
+                            save_tasks(df)
+                            del st.session_state[f"finish_mode_{idx}"]
+                            del st.session_state[f"finish_time_{idx}"]
+                            handle_recurring_tasks(df.iloc[idx]) 
+                            st.rerun()
+
+                        if sub_c2.button("Cancel", key=f"can_{idx}"):
+                            st.session_state[f"finish_mode_{idx}"] = False
+                            st.rerun()                       
                         
                         # --- SAVE CURRENT TASK ---
                         save_tasks(df)
@@ -591,5 +634,6 @@ elif st.session_state.role == "Employee":
             report_df['Hours'] = report_df.apply(get_work_hours, axis=1)
             st.metric(f"Total Hours", f"{report_df['Hours'].sum():.2f} hrs")
             st.dataframe(report_df[["Company", "Task", "Assign_Time", "Submit_Time", "Hours", "Flag"]], use_container_width=True)
+            st.dataframe(report_df[["Company", "Task", "Assign_Time", "Submit_Time", "Hours", "Flag", "Remarks"]], use_container_width=True)
         else:
             st.info("No records found.")
