@@ -110,6 +110,32 @@ COMPANY_LIST = ["Pearl Hospitality LLC", "Shri Guru Om Inc", "276 Old Country Ro
     "New Generation Astoria LLC", "Get My Rugs LLC", "Kika Home Collections Inc", "BBH Homes LLC",
     "1028 Capital LLC", "Jackson Jewelry Group Inc", "Hicksville Jewelry Traders Inc"]
 
+# --- DATABASE HELPERS ---
+COMPANY_DB = "companies_db.csv"
+
+def get_companies():
+    # Check if file is missing OR if it is empty (0 bytes)
+    if not os.path.exists(COMPANY_DB) or (os.path.exists(COMPANY_DB) and os.stat(COMPANY_DB).st_size == 0):
+        df = pd.DataFrame({"Company Name": COMPANY_LIST, "Hourly Rate": [0.0]*len(COMPANY_LIST)})
+        df.to_csv(COMPANY_DB, index=False)
+        return df
+    
+    try:
+        df = pd.read_csv(COMPANY_DB)
+        # Final check: if pandas read it but it's somehow empty, reset it
+        if df.empty:
+            raise ValueError("File is empty")
+        return df
+    except:
+        # Fallback reset
+        df = pd.DataFrame({"Company Name": COMPANY_LIST, "Hourly Rate": [0.0]*len(COMPANY_LIST)})
+        df.to_csv(COMPANY_DB, index=False)
+        return df
+
+def save_companies(df):
+    df.to_csv(COMPANY_DB, index=False)
+
+
 def to_dt(str_val):
     if str_val == "N/A" or not isinstance(str_val, str) or str_val == "":
         return None
@@ -248,7 +274,7 @@ if st.sidebar.button("Logout"):
 
 # --- ADMIN VIEW ---
 if st.session_state.role == "Admin":
-    menu = st.sidebar.radio("Main Menu", ["Dashboard", "Reports & Overrides", "User Management"])
+    menu = st.sidebar.radio("Main Menu", ["Dashboard", "Reports & Overrides", "User Management", "Company Management"])
     
     if menu == "Dashboard":
         st.title("👨‍💼 Task Assignment")
@@ -271,7 +297,10 @@ if st.session_state.role == "Admin":
             with c1: 
                 # Use the new display list here
                 selected_display = st.selectbox("Assign To Employee", u_display_list)
-            with c2: comp = st.selectbox("Company Name", COMPANY_LIST)
+            with c2: 
+                # Fetch companies from your new CSV database
+                comp_db = get_companies()
+                comp = st.selectbox("Company Name", comp_db["Company Name"].tolist())
             with c3: mins = st.number_input("Minutes Allowed", min_value=1, value=15)
             
             # --- NEW SCHEDULING FIELDS ---
@@ -507,6 +536,53 @@ if st.session_state.role == "Admin":
                         if c_cancel.button("✖️ Cancel", key=f"can_upd_{i}"):
                             st.session_state[f"editing_{i}"] = False
                             st.rerun()
+    elif menu == "Company Management":
+            st.title("🏢 Company & Financial Management")
+            
+            tab_a, tab_b = st.tabs(["Add/Edit Companies", "💰 Revenue Report"])
+            
+            with tab_a:
+                comp_df = get_companies()
+                with st.expander("➕ Add New Company"):
+                    c_name = st.text_input("Company Name")
+                    c_rate = st.number_input("Hourly Billing Rate ($)", min_value=0.0, step=1.0)
+                    if st.button("Save to Database"):
+                        if c_name and c_name not in comp_df["Company Name"].values:
+                            new_row = pd.DataFrame([{"Company Name": c_name.strip(), "Hourly Rate": c_rate}])
+                            save_companies(pd.concat([comp_df, new_row], ignore_index=True))
+                            st.success(f"Added {c_name}!"); time.sleep(1); st.rerun()
+
+            st.subheader("Client List")
+            st.dataframe(comp_df, use_container_width=True)
+            
+            to_del = st.selectbox("Select Company to Delete", ["---"] + comp_df["Company Name"].tolist())
+            if st.button("🗑️ Delete Selected"):
+                if to_del != "---":
+                    save_companies(comp_df[comp_df["Company Name"] != to_del])
+                    st.warning(f"Deleted {to_del}"); time.sleep(1); st.rerun()
+
+            with tab_b:
+                st.subheader("Earnings (Finished Tasks)")
+                t_df = get_tasks()
+                c_df = get_companies()
+                # Ensure rates are numbers for calculation
+                c_df["Hourly Rate"] = pd.to_numeric(c_df["Hourly Rate"], errors='coerce').fillna(0)
+                
+                finished = t_df[t_df["Status"] == "Finished"].copy()
+                
+                if not finished.empty:
+                    def calc_h(r):
+                        s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
+                        return (f - s).total_seconds() / 3600 if s and f else 0.0
+                    
+                    finished['Hours'] = finished.apply(calc_h, axis=1)
+                    report = finished.merge(c_df, left_on="Company", right_on="Company Name", how="left")
+                    report["Total Billable"] = report["Hours"] * report["Hourly Rate"]
+                    
+                    st.metric("Total Revenue", f"${report['Total Billable'].sum():,.2f}")
+                    st.dataframe(report[["Company", "Employee", "Task", "Hours", "Hourly Rate", "Total Billable"]], use_container_width=True)
+                else:
+                    st.info("No finished tasks found.")                            
 
 # --- EMPLOYEE VIEW ---
 elif st.session_state.role == "Employee":
