@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import time
 from streamlit_autorefresh import st_autorefresh
 import os
+import pytz
 # ==========================================
 # 1. DATABASE SETUP & HELPERS
 # ==========================================
@@ -111,6 +112,14 @@ COMPANY_LIST = ["Pearl Hospitality LLC", "Shri Guru Om Inc", "276 Old Country Ro
     "1028 Capital LLC", "Jackson Jewelry Group Inc", "Hicksville Jewelry Traders Inc"]
 
 # --- DATABASE HELPERS ---
+
+def get_now_ist():
+    # Define IST timezone
+    ist = pytz.timezone('Asia/Kolkata')
+    # Get current time in IST
+    return datetime.now(ist).replace(tzinfo=None)
+
+
 COMPANY_DB = "companies_db.csv"
 
 def get_companies():
@@ -147,7 +156,7 @@ def to_dt(str_val):
 def render_timer(deadline_str):
     deadline_dt = to_dt(deadline_str)
     if deadline_dt:
-        diff = deadline_dt - datetime.now()
+        diff = deadline_dt - get_now_ist()
         secs = int(diff.total_seconds())
         if secs > 0:
             st.metric("⏳ Time Remaining", f"{secs//60}m {secs%60}s")
@@ -206,7 +215,7 @@ def handle_recurring_tasks(finished_row):
     df = get_tasks()
     new_task = finished_row.copy()
     new_task['Scheduled_Date'] = next_date.strftime("%Y-%m-%d")
-    new_task['Assign_Time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    new_task['Assign_Time'] = get_now_ist().strftime("%Y-%m-%d %H:%M:%S")
     new_task['Status'] = "Pending"
     new_task['Start_Time'] = "Waiting"
     new_task['Deadline'] = "N/A"
@@ -305,7 +314,7 @@ if st.session_state.role == "Admin":
             
             # --- NEW SCHEDULING FIELDS ---
             c4, c5 = st.columns(2)
-            with c4: sched_date = st.date_input("Schedule Date", datetime.now())
+            with c4: sched_date = st.date_input("Schedule Date", get_now_ist())
             with c5: freq = st.selectbox("Repeat Frequency", ["Once", "Daily", "Weekly", "Semi-Monthly", "Monthly"])
 
             tsk = st.text_area("Task Description")
@@ -323,7 +332,7 @@ if st.session_state.role == "Admin":
                     df = get_tasks()
                     new_row = {
                         "Employee": emp, "Company": comp, "Task": tsk, "Limit_Mins": str(mins), 
-                        "Assign_Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "Assign_Time": get_now_ist().strftime("%Y-%m-%d %H:%M:%S"),
                         "Start_Time": "Waiting", "Deadline": "N/A", "Submit_Time": "N/A", 
                         "Time_Variance": "N/A", "Status": "Pending", "Flag": "⚪", "Pause_Start": "N/A",
                         "Scheduled_Date": sched_date.strftime("%Y-%m-%d"),
@@ -375,7 +384,7 @@ if st.session_state.role == "Admin":
             st.download_button(
                 label="📥 Download Report as Excel",
                 data=buffer.getvalue(),
-                file_name=f"Task_Report_{datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                file_name=f"Task_Report_{get_now_ist().strftime('%Y-%m-%d')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
@@ -591,9 +600,9 @@ elif st.session_state.role == "Employee":
     with tab1:
         st.title(f"👷 {st.session_state.user}'s Workspace")
         df = get_tasks()
-        today_start = datetime.now().replace(hour=0, minute=0, second=0)
+        today_start = get_now_ist().replace(hour=0, minute=0, second=0)
 # --- STEP 5: FILTER BY DATE ---
-        today_str = datetime.now().strftime("%Y-%m-%d")
+        today_str = get_now_ist().strftime("%Y-%m-%d")
         
         # Only show tasks for this user that are NOT finished and whose date has arrived
         active_tasks = df[
@@ -608,21 +617,25 @@ elif st.session_state.role == "Employee":
             with st.container(border=True):
                 st.subheader(f"🏢 {row['Company']}")
                 st.write(f"**Task:** {row['Task']}")
-                
-                if st.button("▶️ ACCEPT & START", key=f"s_{idx}"):
-                        now = datetime.now()
-                        # --- FIX START ---
+        
+                # --- REPLACE THE OLD BUTTON LOGIC WITH THIS ---
+                if row["Status"] == "Pending":
+                    if st.button("▶️ ACCEPT & START", key=f"s_{idx}"):
+                        now = get_now_ist()
                         try:
+                            # Convert to float then int to handle strings like "15.0"
                             mins_val = int(float(str(row["Limit_Mins"])))
                         except:
                             mins_val = 15 # Default fallback
                         
                         deadline = now + timedelta(minutes=mins_val)
-                        # --- FIX END ---
+                        
                         df.at[idx, "Start_Time"] = now.strftime("%Y-%m-%d %H:%M:%S")
                         df.at[idx, "Deadline"] = deadline.strftime("%Y-%m-%d %H:%M:%S")
                         df.at[idx, "Status"] = "Running"
-                        save_tasks(df); st.rerun()
+                        save_tasks(df)
+                        st.rerun()
+                # --- END OF REPLACEMENT ---
 
                 elif row["Status"] == "Running":
                     # This calls the fragment to tick every second
@@ -635,13 +648,13 @@ elif st.session_state.role == "Employee":
                     c1, c2 = st.columns(2)
                     
                     if c1.button("⏸️ PAUSE", key=f"p_{idx}"):
-                        df.at[idx, "Pause_Start"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        df.at[idx, "Pause_Start"] = get_now_ist().strftime("%Y-%m-%d %H:%M:%S")
                         df.at[idx, "Status"] = "Paused"
                         save_tasks(df)
                         st.rerun()
                         
                     if c2.button("✅ FINISH", key=f"f_{idx}"):
-                        st.session_state[f"finish_time_{idx}"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        st.session_state[f"finish_time_{idx}"] = get_now_ist().strftime("%Y-%m-%d %H:%M:%S")
                         st.session_state[f"finish_mode_{idx}"] = True
 
                     # --- REMARK INPUT AREA ---
@@ -686,7 +699,7 @@ elif st.session_state.role == "Employee":
                     st.warning("☕ TASK PAUSED")
                     if st.button("▶️ RESUME", key=f"r_{idx}"):
                         p_start = to_dt(row["Pause_Start"])
-                        pause_dur = datetime.now() - p_start
+                        pause_dur = get_now_ist() - p_start
                         new_deadline = to_dt(row["Deadline"]) + pause_dur
                         df.at[idx, "Deadline"] = new_deadline.strftime("%Y-%m-%d %H:%M:%S")
                         df.at[idx, "Status"] = "Running"
@@ -696,10 +709,10 @@ elif st.session_state.role == "Employee":
     with tab2:
         st.title("📊 Work History")
         df = get_tasks()
-        today_start = datetime.now().replace(hour=0, minute=0, second=0)
+        today_start = get_now_ist().replace(hour=0, minute=0, second=0)
         my_history = df[df["Employee"] == st.session_state.user]
         rep_type = st.radio("Period", ["Daily (Today)", "Monthly (30 Days)"], horizontal=True)
-        since_date = today_start if "Daily" in rep_type else (datetime.now() - timedelta(days=30))
+        since_date = today_start if "Daily" in rep_type else (get_now_ist() - timedelta(days=30))
         report_df = my_history[my_history["Assign_DT"] >= since_date].copy()
         
         def get_work_hours(r):
