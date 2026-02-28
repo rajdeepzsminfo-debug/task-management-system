@@ -149,9 +149,15 @@ def to_dt(str_val):
     if str_val == "N/A" or not isinstance(str_val, str) or str_val == "":
         return None
     try:
-        return datetime.strptime(str_val, "%Y-%m-%d %H:%M:%S")
+        # Try 12-hour format first
+        return datetime.strptime(str_val, "%Y-%m-%d %I:%M:%S %p")
     except:
-        return None
+        try:
+            # Fallback for old 24-hour records
+            return datetime.strptime(str_val, "%Y-%m-%d %H:%M:%S")
+        except:
+            # If both fail, return None
+            return None
 @st.fragment(run_every="1s")
 def render_timer(deadline_str):
     deadline_dt = to_dt(deadline_str)
@@ -215,7 +221,7 @@ def handle_recurring_tasks(finished_row):
     df = get_tasks()
     new_task = finished_row.copy()
     new_task['Scheduled_Date'] = next_date.strftime("%Y-%m-%d")
-    new_task['Assign_Time'] = get_now_ist().strftime("%Y-%m-%d %H:%M:%S")
+    new_task['Assign_Time'] = get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p")
     new_task['Status'] = "Pending"
     new_task['Start_Time'] = "Waiting"
     new_task['Deadline'] = "N/A"
@@ -332,7 +338,7 @@ if st.session_state.role == "Admin":
                     df = get_tasks()
                     new_row = {
                         "Employee": emp, "Company": comp, "Task": tsk, "Limit_Mins": str(mins), 
-                        "Assign_Time": get_now_ist().strftime("%Y-%m-%d %H:%M:%S"),
+                        "Assign_Time": get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p"),
                         "Start_Time": "Waiting", "Deadline": "N/A", "Submit_Time": "N/A", 
                         "Time_Variance": "N/A", "Status": "Pending", "Flag": "⚪", "Pause_Start": "N/A",
                         "Scheduled_Date": sched_date.strftime("%Y-%m-%d"),
@@ -384,7 +390,7 @@ if st.session_state.role == "Admin":
             st.download_button(
                 label="📥 Download Report as Excel",
                 data=buffer.getvalue(),
-                file_name=f"Task_Report_{get_now_ist().strftime('%Y-%m-%d')}.xlsx",
+                file_name=f"Task_Report_{get_now_ist().strftime('%Y-%m-%d_%I-%M-%p')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
@@ -630,8 +636,8 @@ elif st.session_state.role == "Employee":
                         
                         deadline = now + timedelta(minutes=mins_val)
                         
-                        df.at[idx, "Start_Time"] = now.strftime("%Y-%m-%d %H:%M:%S")
-                        df.at[idx, "Deadline"] = deadline.strftime("%Y-%m-%d %H:%M:%S")
+                        df.at[idx, "Start_Time"] = now.strftime("%Y-%m-%d %I:%M:%S %p")
+                        df.at[idx, "Deadline"] = deadline.strftime("%Y-%m-%d %I:%M:%S %p")
                         df.at[idx, "Status"] = "Running"
                         save_tasks(df)
                         st.rerun()
@@ -648,13 +654,13 @@ elif st.session_state.role == "Employee":
                     c1, c2 = st.columns(2)
                     
                     if c1.button("⏸️ PAUSE", key=f"p_{idx}"):
-                        df.at[idx, "Pause_Start"] = get_now_ist().strftime("%Y-%m-%d %H:%M:%S")
+                        df.at[idx, "Pause_Start"] = get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p")
                         df.at[idx, "Status"] = "Paused"
                         save_tasks(df)
                         st.rerun()
                         
                     if c2.button("✅ FINISH", key=f"f_{idx}"):
-                        st.session_state[f"finish_time_{idx}"] = get_now_ist().strftime("%Y-%m-%d %H:%M:%S")
+                        st.session_state[f"finish_time_{idx}"] = get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p")
                         st.session_state[f"finish_mode_{idx}"] = True
 
                     # --- REMARK INPUT AREA ---
