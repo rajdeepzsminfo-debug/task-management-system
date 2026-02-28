@@ -172,7 +172,7 @@ def render_timer(deadline_str):
 
 TASK_COLS = ["Employee", "Company", "Task", "Limit_Mins", "Assign_Time", "Start_Time", 
              "Deadline", "Submit_Time", "Time_Variance", "Status", "Flag", "Pause_Start", 
-             "Scheduled_Date", "Frequency"]
+             "Scheduled_Date", "Frequency", "Total_Paused_Mins", "Pause_Count"]
 USER_COLS = ["Username", "Password", "Department"]
 
 for db, cols in {TASK_DB: TASK_COLS, USER_DB: USER_COLS}.items():
@@ -342,7 +342,9 @@ if st.session_state.role == "Admin":
                         "Start_Time": "Waiting", "Deadline": "N/A", "Submit_Time": "N/A", 
                         "Time_Variance": "N/A", "Status": "Pending", "Flag": "⚪", "Pause_Start": "N/A",
                         "Scheduled_Date": sched_date.strftime("%Y-%m-%d"),
-                        "Frequency": freq
+                        "Frequency": freq,
+                        "Total_Paused_Mins": 0,
+                        "Pause_Count": 0
                     }
                     save_tasks(pd.concat([df, pd.DataFrame([new_row])], ignore_index=True))
                     
@@ -656,6 +658,8 @@ elif st.session_state.role == "Employee":
                     if c1.button("⏸️ PAUSE", key=f"p_{idx}"):
                         df.at[idx, "Pause_Start"] = get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p")
                         df.at[idx, "Status"] = "Paused"
+                        current_count = int(float(str(row.get("Pause_Count", 0))))
+                        df.at[idx, "Pause_Count"] = current_count + 1
                         save_tasks(df)
                         st.rerun()
                         
@@ -705,9 +709,13 @@ elif st.session_state.role == "Employee":
                     st.warning("☕ TASK PAUSED")
                     if st.button("▶️ RESUME", key=f"r_{idx}"):
                         p_start = to_dt(row["Pause_Start"])
-                        pause_dur = get_now_ist() - p_start
+                        now = get_now_ist()
+                        pause_dur = now - p_start
+                        mins_paused = int(pause_dur.total_seconds() // 60)
+                        current_total_paused = float(str(row.get("Total_Paused_Mins", 0)))
+                        df.at[idx, "Total_Paused_Mins"] = str(round(current_total_paused + mins_paused, 2))
                         new_deadline = to_dt(row["Deadline"]) + pause_dur
-                        df.at[idx, "Deadline"] = new_deadline.strftime("%Y-%m-%d %H:%M:%S")
+                        df.at[idx, "Deadline"] = new_deadline.strftime("%Y-%m-%d %I:%M:%S %p")
                         df.at[idx, "Status"] = "Running"
                         df.at[idx, "Pause_Start"] = "N/A"
                         save_tasks(df); st.rerun()
@@ -726,9 +734,20 @@ elif st.session_state.role == "Employee":
             return round((f - s).total_seconds() / 3600, 2) if s and f else 0.0
 
         if not report_df.empty:
+            # 1. Calculate work hours
             report_df['Hours'] = report_df.apply(get_work_hours, axis=1)
-            st.metric(f"Total Hours", f"{report_df['Hours'].sum():.2f} hrs")
-            st.dataframe(report_df[["Company", "Task", "Assign_Time", "Submit_Time", "Hours", "Flag"]], use_container_width=True)
-            st.dataframe(report_df[["Company", "Task", "Assign_Time", "Submit_Time", "Hours", "Flag", "Remarks"]], use_container_width=True)
+            
+            # 2. Show Summary Metrics
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total Work Hours", f"{report_df['Hours'].sum():.2f} hrs")
+            c2.metric("Total Pauses", f"{pd.to_numeric(report_df['Pause_Count'], errors='coerce').sum():.0f}")
+            c3.metric("Total Pause Time", f"{pd.to_numeric(report_df['Total_Paused_Mins'], errors='coerce').sum():.2f} mins")
+            
+            # 3. Show Detailed Dataframe
+            st.dataframe(
+                report_df[[
+                    "Company", "Task", "Assign_Time", "Submit_Time", "Hours", "Pause_Count","Total_Paused_Mins", "Flag", "Remarks"]], 
+                use_container_width=True
+            )
         else:
             st.info("No records found.")
