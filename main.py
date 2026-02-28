@@ -489,7 +489,7 @@ if st.session_state.role == "Admin":
             with c1: nu = st.text_input("New Username")
             with c2: np = st.text_input("New Password")
             # --- NEW DEPARTMENT DROPDOWN ---
-            with c3: dept = st.selectbox("Department", ["Accountant", "Tax", "Audit", "Payroll", "Admin Support", "Book Keeping"])
+            with c3: dept = st.selectbox("Department", ["Accountant", "Tax", "Audit", "Payroll", "Admin Support", "Notices", "Sales Tax", "Book Keeping"])
             
             if st.form_submit_button("➕ Save User"):
                 if nu and np:
@@ -752,4 +752,5 @@ elif st.session_state.role == "Employee":
         else:
 
             st.info("No records found.")
+
 
