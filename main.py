@@ -324,7 +324,7 @@ if st.session_state.role == "Admin":
             with c2: 
                 # Fetch companies from your new CSV database
                 comp_db = get_companies()
-                comp = st.selectbox("Company Name", comp_db["Company Name"].tolist())
+                comp = st.selectbox("Select Company", comp_db["Company_Name"].tolist())
             with c3: mins = st.number_input("Minutes Allowed", min_value=1, value=15)
             
             # --- NEW SCHEDULING FIELDS ---
@@ -761,4 +761,5 @@ elif st.session_state.role == "Employee":
         else:
 
             st.info("No records found.")
+
 
