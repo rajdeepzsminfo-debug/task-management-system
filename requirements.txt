@@ -3,4 +3,6 @@ pandas
 openpyxl
 streamlit-autorefresh
 pytz
+st-gsheets-connection
+gspread
 
