@@ -185,118 +185,118 @@ elif st.session_state.role == "Employee":
 # 4. ADMIN: REPORTS, USERS, & COMPANIES
 # ==========================================
 
-    elif menu == "Reports & Overrides":
-        st.title("📊 Global Performance Reports & Overrides")
-        df = get_tasks()
-        
-        f1, f2, f3 = st.columns(3)
-        c_filt = f1.multiselect("Filter by Company", COMPANY_LIST)
-        e_filt = f2.multiselect("Filter by Employee", get_users()['Username'].tolist())
-        s_filt = f3.multiselect("Filter by Status", ["Pending", "Running", "Paused", "Finished"])
-        
-        if c_filt: df = df[df['Company'].isin(c_filt)]
-        if e_filt: df = df[df['Employee'].isin(e_filt)]
-        if s_filt: df = df[df['Status'].isin(s_filt)]
+                elif menu == "Reports & Overrides":
+                    st.title("📊 Global Performance Reports & Overrides")
+                    df = get_tasks()
+                    
+                    f1, f2, f3 = st.columns(3)
+                    c_filt = f1.multiselect("Filter by Company", COMPANY_LIST)
+                    e_filt = f2.multiselect("Filter by Employee", get_users()['Username'].tolist())
+                    s_filt = f3.multiselect("Filter by Status", ["Pending", "Running", "Paused", "Finished"])
+                    
+                    if c_filt: df = df[df['Company'].isin(c_filt)]
+                    if e_filt: df = df[df['Employee'].isin(e_filt)]
+                    if s_filt: df = df[df['Status'].isin(s_filt)]
 
-        if not df.empty:
-            st.write("---")
-            buffer = io.BytesIO()
-            export_df = df.copy()
-            if 'Assign_DT' in export_df.columns:
-                export_df = export_df.drop(columns=['Assign_DT'])
-            
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                export_df.to_excel(writer, index=False, sheet_name='TaskReport')
-            
-            st.download_button(
-                label="📥 Download Report as Excel",
-                data=buffer.getvalue(),
-                file_name=f"Task_Report_{get_now_ist().strftime('%Y-%m-%d_%I-%M-%p')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-            st.write("---")
+                    if not df.empty:
+                        st.write("---")
+                        buffer = io.BytesIO()
+                        export_df = df.copy()
+                        if 'Assign_DT' in export_df.columns:
+                            export_df = export_df.drop(columns=['Assign_DT'])
+                        
+                        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                            export_df.to_excel(writer, index=False, sheet_name='TaskReport')
+                        
+                        st.download_button(
+                            label="📥 Download Report as Excel",
+                            data=buffer.getvalue(),
+                            file_name=f"Task_Report_{get_now_ist().strftime('%Y-%m-%d_%I-%M-%p')}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True
+                        )
+                        st.write("---")
 
-            h1, h2, h3, h4, h5 = st.columns([2, 3, 2, 2, 2])
-            h1.write("**Employee/Company**")
-            h2.write("**Task Description**")
-            h3.write("**Status/Mins**")
-            h4.write("**Time Info**")
-            h5.write("**Actions**")
-            st.divider()
+                        h1, h2, h3, h4, h5 = st.columns([2, 3, 2, 2, 2])
+                        h1.write("**Employee/Company**")
+                        h2.write("**Task Description**")
+                        h3.write("**Status/Mins**")
+                        h4.write("**Time Info**")
+                        h5.write("**Actions**")
+                        st.divider()
 
-            for idx, row in df.iterrows():
-                col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 2, 2])
-                col1.write(f"👤 {row['Employee']}")
-                col1.caption(f"🏢 {row['Company']}")
-                col2.write(row['Task'])
-                status_color = {"Pending": "⚪", "Running": "🔵", "Paused": "🟡", "Finished": row['Flag']}
-                col3.write(f"{status_color.get(row['Status'], '⚪')} {row['Status']}")
-                col3.write(f"⏱️ {row['Limit_Mins']} mins")
-                col4.caption(f"Assigned: {row['Assign_Time']}")
-                if row['Submit_Time'] != "N/A":
-                    col4.caption(f"Submitted: {row['Submit_Time']}")
+                        for idx, row in df.iterrows():
+                            col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 2, 2])
+                            col1.write(f"👤 {row['Employee']}")
+                            col1.caption(f"🏢 {row['Company']}")
+                            col2.write(row['Task'])
+                            status_color = {"Pending": "⚪", "Running": "🔵", "Paused": "🟡", "Finished": row['Flag']}
+                            col3.write(f"{status_color.get(row['Status'], '⚪')} {row['Status']}")
+                            col3.write(f"⏱️ {row['Limit_Mins']} mins")
+                            col4.caption(f"Assigned: {row['Assign_Time']}")
+                            if row['Submit_Time'] != "N/A":
+                                col4.caption(f"Submitted: {row['Submit_Time']}")
 
-                if col5.button("🗑️ Delete", key=f"del_task_{idx}"):
-                    full_df = get_tasks().drop(idx)
-                    save_tasks(full_df)
-                    st.toast("Task deleted!"); time.sleep(1); st.rerun()
+                            if col5.button("🗑️ Delete", key=f"del_task_{idx}"):
+                                full_df = get_tasks().drop(idx)
+                                save_tasks(full_df)
+                                st.toast("Task deleted!"); time.sleep(1); st.rerun()
 
-    elif menu == "User Management":
-        st.title("👥 User Management")
-        u_df = get_users()
-        with st.form("add_user", clear_on_submit=True):
-            st.subheader("Add New Employee")
-            c1, c2, c3 = st.columns(3)
-            nu = c1.text_input("New Username")
-            np = c2.text_input("New Password")
-            dept = c3.selectbox("Department", ["Accountant", "Tax", "Audit", "Payroll", "Admin Support", "Notices", "Sales Tax", "Book Keeping"])
-            if st.form_submit_button("➕ Save User"):
-                if nu and np:
-                    if nu in u_df['Username'].values: st.error("User exists!")
-                    else:
-                        new_u = pd.DataFrame([{"Username": nu, "Password": np, "Department": dept}])
-                        save_users(pd.concat([u_df, new_u], ignore_index=True))
-                        st.success(f"Added {nu}!"); time.sleep(1); st.rerun()
+                elif menu == "User Management":
+                    st.title("👥 User Management")
+                    u_df = get_users()
+                    with st.form("add_user", clear_on_submit=True):
+                        st.subheader("Add New Employee")
+                        c1, c2, c3 = st.columns(3)
+                        nu = c1.text_input("New Username")
+                        np = c2.text_input("New Password")
+                        dept = c3.selectbox("Department", ["Accountant", "Tax", "Audit", "Payroll", "Admin Support", "Notices", "Sales Tax", "Book Keeping"])
+                        if st.form_submit_button("➕ Save User"):
+                            if nu and np:
+                                if nu in u_df['Username'].values: st.error("User exists!")
+                                else:
+                                    new_u = pd.DataFrame([{"Username": nu, "Password": np, "Department": dept}])
+                                    save_users(pd.concat([u_df, new_u], ignore_index=True))
+                                    st.success(f"Added {nu}!"); time.sleep(1); st.rerun()
 
-        st.subheader("Current Employees")
-        for i, r in u_df.iterrows():
-            row_c1, row_c2, row_c3 = st.columns([2, 2, 2])
-            row_c1.write(r['Username'])
-            is_visible = st.toggle("Show", key=f"show_{i}")
-            row_c2.write(f"`{r['Password']}`" if is_visible else "********")
-            if row_c3.button("🗑️ Delete", key=f"del_u_{i}"):
-                save_users(u_df.drop(i))
-                st.toast("User deleted"); time.sleep(0.5); st.rerun()
+                    st.subheader("Current Employees")
+                    for i, r in u_df.iterrows():
+                        row_c1, row_c2, row_c3 = st.columns([2, 2, 2])
+                        row_c1.write(r['Username'])
+                        is_visible = st.toggle("Show", key=f"show_{i}")
+                        row_c2.write(f"`{r['Password']}`" if is_visible else "********")
+                        if row_c3.button("🗑️ Delete", key=f"del_u_{i}"):
+                            save_users(u_df.drop(i))
+                            st.toast("User deleted"); time.sleep(0.5); st.rerun()
 
-    elif menu == "Company Management":
-            st.title("🏢 Company Management")
-            tab_a, tab_b = st.tabs(["Add/Edit Companies", "💰 Revenue Report"])
-            with tab_a:
-                comp_df = get_companies()
-                with st.expander("➕ Add New Company"):
-                    c_name = st.text_input("Company Name")
-                    c_rate = st.number_input("Hourly Billing Rate ($)", min_value=0.0, step=1.0)
-                    if st.button("Save to Database"):
-                        new_row = pd.DataFrame([{"Company Name": c_name.strip(), "Hourly Rate": c_rate}])
-                        save_companies(pd.concat([comp_df, new_row], ignore_index=True))
-                        st.success("Added!"); time.sleep(1); st.rerun()
-                st.dataframe(comp_df, use_container_width=True)
+                elif menu == "Company Management":
+                        st.title("🏢 Company Management")
+                        tab_a, tab_b = st.tabs(["Add/Edit Companies", "💰 Revenue Report"])
+                        with tab_a:
+                            comp_df = get_companies()
+                            with st.expander("➕ Add New Company"):
+                                c_name = st.text_input("Company Name")
+                                c_rate = st.number_input("Hourly Billing Rate ($)", min_value=0.0, step=1.0)
+                                if st.button("Save to Database"):
+                                    new_row = pd.DataFrame([{"Company Name": c_name.strip(), "Hourly Rate": c_rate}])
+                                    save_companies(pd.concat([comp_df, new_row], ignore_index=True))
+                                    st.success("Added!"); time.sleep(1); st.rerun()
+                            st.dataframe(comp_df, use_container_width=True)
 
-            with tab_b:
-                t_df = get_tasks()
-                c_df = get_companies()
-                c_df["Hourly Rate"] = pd.to_numeric(c_df["Hourly Rate"], errors='coerce').fillna(0)
-                finished = t_df[t_df["Status"] == "Finished"].copy()
-                if not finished.empty:
-                    def calc_h(r):
-                        s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
-                        return (f - s).total_seconds() / 3600 if s and f else 0.0
-                    finished['Hours'] = finished.apply(calc_h, axis=1)
-                    report = finished.merge(c_df, left_on="Company", right_on="Company Name", how="left")
-                    report["Total Billable"] = report["Hours"] * report["Hourly Rate"]
-                    st.metric("Total Revenue", f"${report['Total Billable'].sum():,.2f}")
-                    st.dataframe(report[["Company", "Employee", "Task", "Hours", "Total Billable"]], use_container_width=True)
+                        with tab_b:
+                            t_df = get_tasks()
+                            c_df = get_companies()
+                            c_df["Hourly Rate"] = pd.to_numeric(c_df["Hourly Rate"], errors='coerce').fillna(0)
+                            finished = t_df[t_df["Status"] == "Finished"].copy()
+                            if not finished.empty:
+                                def calc_h(r):
+                                    s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
+                                    return (f - s).total_seconds() / 3600 if s and f else 0.0
+                                finished['Hours'] = finished.apply(calc_h, axis=1)
+                                report = finished.merge(c_df, left_on="Company", right_on="Company Name", how="left")
+                                report["Total Billable"] = report["Hours"] * report["Hourly Rate"]
+                                st.metric("Total Revenue", f"${report['Total Billable'].sum():,.2f}")
+                                st.dataframe(report[["Company", "Employee", "Task", "Hours", "Total Billable"]], use_container_width=True)
 
 # ==========================================
 # 5. EMPLOYEE VIEW: ACTIVE TASKS & HISTORY
