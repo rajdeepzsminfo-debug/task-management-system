@@ -270,60 +270,60 @@ elif st.session_state.role == "Employee":
                 st.toast("User deleted"); time.sleep(0.5); st.rerun()
 
     elif menu == "Company Management":
-        st.title("🏢 Company Management")
-        tab_a, tab_b = st.tabs(["Add/Edit Companies", "💰 Revenue Report"])
-        with tab_a:
-            comp_df = get_companies()
-            with st.expander("➕ Add New Company"):
-                c_name = st.text_input("Company Name")
-                c_rate = st.number_input("Hourly Billing Rate ($)", min_value=0.0, step=1.0)
-                if st.button("Save to Database"):
-                    new_row = pd.DataFrame([{"Company Name": c_name.strip(), "Hourly Rate": c_rate}])
-                    save_companies(pd.concat([comp_df, new_row], ignore_index=True))
-                    st.success("Added!"); time.sleep(1); st.rerun()
-            st.dataframe(comp_df, use_container_width=True)
+            st.title("🏢 Company Management")
+            tab_a, tab_b = st.tabs(["Add/Edit Companies", "💰 Revenue Report"])
+            with tab_a:
+                comp_df = get_companies()
+                with st.expander("➕ Add New Company"):
+                    c_name = st.text_input("Company Name")
+                    c_rate = st.number_input("Hourly Billing Rate ($)", min_value=0.0, step=1.0)
+                    if st.button("Save to Database"):
+                        new_row = pd.DataFrame([{"Company Name": c_name.strip(), "Hourly Rate": c_rate}])
+                        save_companies(pd.concat([comp_df, new_row], ignore_index=True))
+                        st.success("Added!"); time.sleep(1); st.rerun()
+                st.dataframe(comp_df, use_container_width=True)
 
-        with tab_b:
-            t_df = get_tasks()
-            c_df = get_companies()
-            c_df["Hourly Rate"] = pd.to_numeric(c_df["Hourly Rate"], errors='coerce').fillna(0)
-            finished = t_df[t_df["Status"] == "Finished"].copy()
-            if not finished.empty:
-                def calc_h(r):
-                    s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
-                    return (f - s).total_seconds() / 3600 if s and f else 0.0
-                finished['Hours'] = finished.apply(calc_h, axis=1)
-                report = finished.merge(c_df, left_on="Company", right_on="Company Name", how="left")
-                report["Total Billable"] = report["Hours"] * report["Hourly Rate"]
-                st.metric("Total Revenue", f"${report['Total Billable'].sum():,.2f}")
-                st.dataframe(report[["Company", "Employee", "Task", "Hours", "Total Billable"]], use_container_width=True)
+            with tab_b:
+                t_df = get_tasks()
+                c_df = get_companies()
+                c_df["Hourly Rate"] = pd.to_numeric(c_df["Hourly Rate"], errors='coerce').fillna(0)
+                finished = t_df[t_df["Status"] == "Finished"].copy()
+                if not finished.empty:
+                    def calc_h(r):
+                        s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
+                        return (f - s).total_seconds() / 3600 if s and f else 0.0
+                    finished['Hours'] = finished.apply(calc_h, axis=1)
+                    report = finished.merge(c_df, left_on="Company", right_on="Company Name", how="left")
+                    report["Total Billable"] = report["Hours"] * report["Hourly Rate"]
+                    st.metric("Total Revenue", f"${report['Total Billable'].sum():,.2f}")
+                    st.dataframe(report[["Company", "Employee", "Task", "Hours", "Total Billable"]], use_container_width=True)
 
 # ==========================================
 # 5. EMPLOYEE VIEW: ACTIVE TASKS & HISTORY
 # ==========================================
 
-elif st.session_state.role == "Employee":
-    tab1, tab2 = st.tabs(["🚀 Active Tasks", "📜 My Reports"])
-    with tab1:
-        st.title(f"👷 {st.session_state.user}'s Workspace")
-        df = get_tasks()
-        today_str = get_now_ist().strftime("%Y-%m-%d")
-        active_tasks = df[(df["Employee"] == st.session_state.user) & (df["Status"] != "Finished") & (df["Scheduled_Date"] <= today_str)]
-        
-        if active_tasks.empty: st.info("No tasks for today.")
-        for idx, row in active_tasks.iterrows():
-            with st.container(border=True):
-                st.subheader(f"🏢 {row['Company']}")
-                st.write(f"**Task:** {row['Task']}")
-                
-                if row["Status"] == "Pending":
-                    if st.button("▶️ ACCEPT & START", key=f"s_{idx}"):
-                        now = get_now_ist()
-                        m_val = int(float(str(row["Limit_Mins"])))
-                        df.at[idx, "Start_Time"] = now.strftime("%Y-%m-%d %I:%M:%S %p")
-                        df.at[idx, "Deadline"] = (now + timedelta(minutes=m_val)).strftime("%Y-%m-%d %I:%M:%S %p")
-                        df.at[idx, "Status"] = "Running"
-                        save_tasks(df); st.rerun()
+                elif st.session_state.role == "Employee":
+                    tab1, tab2 = st.tabs(["🚀 Active Tasks", "📜 My Reports"])
+                    with tab1:
+                        st.title(f"👷 {st.session_state.user}'s Workspace")
+                        df = get_tasks()
+                        today_str = get_now_ist().strftime("%Y-%m-%d")
+                        active_tasks = df[(df["Employee"] == st.session_state.user) & (df["Status"] != "Finished") & (df["Scheduled_Date"] <= today_str)]
+                        
+                        if active_tasks.empty: st.info("No tasks for today.")
+                        for idx, row in active_tasks.iterrows():
+                            with st.container(border=True):
+                                st.subheader(f"🏢 {row['Company']}")
+                                st.write(f"**Task:** {row['Task']}")
+                                
+                                if row["Status"] == "Pending":
+                                    if st.button("▶️ ACCEPT & START", key=f"s_{idx}"):
+                                        now = get_now_ist()
+                                        m_val = int(float(str(row["Limit_Mins"])))
+                                        df.at[idx, "Start_Time"] = now.strftime("%Y-%m-%d %I:%M:%S %p")
+                                        df.at[idx, "Deadline"] = (now + timedelta(minutes=m_val)).strftime("%Y-%m-%d %I:%M:%S %p")
+                                        df.at[idx, "Status"] = "Running"
+                                        save_tasks(df); st.rerun()
 
                 elif row["Status"] == "Running":
                     if not st.session_state.get(f"finish_mode_{idx}", False):
@@ -364,19 +364,19 @@ elif st.session_state.role == "Employee":
                         df.at[idx, "Status"], df.at[idx, "Pause_Start"] = "Running", "N/A"
                         save_tasks(df); st.rerun()
 
-    with tab2:
-        st.title("📊 Work History")
-        df = get_tasks()
-        my_history = df[df["Employee"] == st.session_state.user]
-        rep_type = st.radio("Period", ["Daily (Today)", "Monthly (30 Days)"], horizontal=True)
-        since_date = get_now_ist().replace(hour=0, minute=0, second=0) if "Daily" in rep_type else (get_now_ist() - timedelta(days=30))
-        report_df = my_history[my_history["Assign_DT"] >= since_date].copy()
-        
-        if not report_df.empty:
-            def get_work_hours(r):
-                s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
-                return round((f - s).total_seconds() / 3600, 2) if s and f else 0.0
-            report_df['Hours'] = report_df.apply(get_work_hours, axis=1)
-            st.metric("Total Work Hours", f"{report_df['Hours'].sum():.2f} hrs")
-            st.dataframe(report_df[["Company", "Task", "Assign_Time", "Submit_Time", "Hours", "Flag", "Remarks"]], use_container_width=True)
-        else: st.info("No records found.")
+                with tab2:
+                    st.title("📊 Work History")
+                    df = get_tasks()
+                    my_history = df[df["Employee"] == st.session_state.user]
+                    rep_type = st.radio("Period", ["Daily (Today)", "Monthly (30 Days)"], horizontal=True)
+                    since_date = get_now_ist().replace(hour=0, minute=0, second=0) if "Daily" in rep_type else (get_now_ist() - timedelta(days=30))
+                    report_df = my_history[my_history["Assign_DT"] >= since_date].copy()
+                    
+                    if not report_df.empty:
+                        def get_work_hours(r):
+                            s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
+                            return round((f - s).total_seconds() / 3600, 2) if s and f else 0.0
+                        report_df['Hours'] = report_df.apply(get_work_hours, axis=1)
+                        st.metric("Total Work Hours", f"{report_df['Hours'].sum():.2f} hrs")
+                        st.dataframe(report_df[["Company", "Task", "Assign_Time", "Submit_Time", "Hours", "Flag", "Remarks"]], use_container_width=True)
+                    else: st.info("No records found.")
