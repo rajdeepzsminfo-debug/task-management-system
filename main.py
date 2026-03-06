@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+from streamlit_gsheets import GSheetsConnection  # Add this line
+from datetime import datetime, timedelta
 from datetime import datetime, timedelta
 import time
 from streamlit_autorefresh import st_autorefresh
@@ -8,6 +10,9 @@ import pytz
 # ==========================================
 # 1. DATABASE SETUP & HELPERS
 # ==========================================
+# Create the connection object
+conn = st.connection("gsheets", type=GSheetsConnection)
+
 ADMIN_PASSWORD = "admin123" 
 TASK_DB = "task_system_final.csv"
 USER_DB = "users_db_final.csv"
@@ -180,19 +185,28 @@ for db, cols in {TASK_DB: TASK_COLS, USER_DB: USER_COLS}.items():
         pd.DataFrame(columns=cols).to_csv(db, index=False)
 
 def get_tasks(): 
-    df = pd.read_csv(TASK_DB).fillna("N/A").astype(str)
+    # This pulls data from the "Tasks" tab in your Google Sheet
+    df = conn.read(worksheet="Tasks", ttl=0) 
+    df = df.fillna("N/A").astype(str)
+    
     if "Remarks" not in df.columns:
         df["Remarks"] = ""
-    df['Assign_DT'] = pd.to_datetime(df['Assign_Time'], errors='coerce')
+        
+    # We keep your original logic for the date conversion
+    df['Assign_DT'] = pd.to_datetime(df['Assign_Time'], errors='coerce') [cite: 146, 147]
     return df
 
 def save_tasks(df): 
+    # If your code added a temporary 'Assign_DT' column, we remove it before saving [cite: 147]
     if 'Assign_DT' in df.columns: 
         df = df.drop(columns=['Assign_DT'])
-    df.to_csv(TASK_DB, index=False)
+    
+    # This pushes the data back to the "Tasks" tab in your Google Sheet
+    conn.update(worksheet="Tasks", data=df)
+    # This clears the internal cache so you see the changes immediately
+    st.cache_data.clear()
 
-def get_users(): return pd.read_csv(USER_DB).astype(str)
-def save_users(df): df.to_csv(USER_DB, index=False)
+    
 # ==========================================
 # RECURRING TASK LOGIC (STEP 2)
 # ==========================================
