@@ -5,6 +5,8 @@ import time
 from streamlit_autorefresh import st_autorefresh
 import os
 import pytz
+from streamlit_gsheets import GSheetsConnection # type: ignore
+conn = st.connection("gsheets", type=GSheetsConnection)
 # ==========================================
 # 1. DATABASE SETUP & HELPERS
 # ==========================================
@@ -123,26 +125,25 @@ def get_now_ist():
 COMPANY_DB = "companies_db.csv"
 
 def get_companies():
-    # Check if file is missing OR if it is empty (0 bytes)
-    if not os.path.exists(COMPANY_DB) or (os.path.exists(COMPANY_DB) and os.stat(COMPANY_DB).st_size == 0):
-        df = pd.DataFrame({"Company Name": COMPANY_LIST, "Hourly Rate": [0.0]*len(COMPANY_LIST)})
-        df.to_csv(COMPANY_DB, index=False)
-        return df
-    
+    # This pulls the data from your "Companies" tab in Google Sheets
+    # ttl=0 ensures it always gets the latest list
     try:
-        df = pd.read_csv(COMPANY_DB)
-        # Final check: if pandas read it but it's somehow empty, reset it
+        df = conn.read(worksheet="Companies", ttl=0)
+        
+        # If the sheet is empty, we create a default one
         if df.empty:
-            raise ValueError("File is empty")
+            df = pd.DataFrame({"Company Name": COMPANY_LIST, "Hourly Rate": [0.0]*len(COMPANY_LIST)})
+            save_companies(df)
         return df
     except:
-        # Fallback reset
+        # Fallback: If the sheet doesn't exist yet, create a default list
         df = pd.DataFrame({"Company Name": COMPANY_LIST, "Hourly Rate": [0.0]*len(COMPANY_LIST)})
-        df.to_csv(COMPANY_DB, index=False)
+        save_companies(df)
         return df
 
 def save_companies(df):
-    df.to_csv(COMPANY_DB, index=False)
+    # This saves your Hourly Rates and Company Names directly to the Google Sheet
+    conn.update(worksheet="Companies", data=df)
 
 
 def to_dt(str_val):
@@ -179,20 +180,28 @@ for db, cols in {TASK_DB: TASK_COLS, USER_DB: USER_COLS}.items():
     if not os.path.exists(db):
         pd.DataFrame(columns=cols).to_csv(db, index=False)
 
-def get_tasks(): 
-    df = pd.read_csv(TASK_DB).fillna("N/A").astype(str)
+def get_tasks():
+    # This pulls fresh data from your "Tasks" tab in Google Sheets
+    df = conn.read(worksheet="Tasks", ttl=0).fillna("N/A").astype(str)
     if "Remarks" not in df.columns:
         df["Remarks"] = ""
+    # We keep this part so your sorting still works
     df['Assign_DT'] = pd.to_datetime(df['Assign_Time'], errors='coerce')
     return df
 
-def save_tasks(df): 
-    if 'Assign_DT' in df.columns: 
+def save_tasks(df):
+    # We remove the temporary 'Assign_DT' before saving so the sheet stays clean
+    if 'Assign_DT' in df.columns:
         df = df.drop(columns=['Assign_DT'])
-    df.to_csv(TASK_DB, index=False)
+    # This sends the data to your Google Sheet
+    conn.update(worksheet="Tasks", data=df)
 
-def get_users(): return pd.read_csv(USER_DB).astype(str)
-def save_users(df): df.to_csv(USER_DB, index=False)
+def get_users(): 
+    # This pulls your employee list from the "Users" tab
+    return conn.read(worksheet="Users", ttl=0).astype(str)
+
+def save_users(df): 
+    conn.update(worksheet="Users", data=df)
 # ==========================================
 # RECURRING TASK LOGIC (STEP 2)
 # ==========================================
@@ -752,5 +761,4 @@ elif st.session_state.role == "Employee":
         else:
 
             st.info("No records found.")
-
 
