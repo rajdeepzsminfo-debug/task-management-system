@@ -346,7 +346,7 @@ if st.session_state.role == "Admin":
                         st.markdown("---")
                         new_mins = st.number_input("Adjust Mins", value=int(row['Limit_Mins']), key=f"min_{idx}")
                         new_stat = st.selectbox("Force Status", ["Pending", "Running", "Paused", "Finished"], 
-                                             index=["Pending", "Running", "Paused", "Finished"].index(row['Status']), key=f"stat_{idx}")
+                                            index=["Pending", "Running", "Paused", "Finished"].index(row['Status']), key=f"stat_{idx}")
                         
                         if st.button("💾 Save Changes", key=f"save_{idx}"):
                             full_db = get_tasks()
@@ -478,279 +478,220 @@ if st.session_state.role == "Admin":
                 st.info("No billable data yet. Tasks must be marked as 'Finished' to show here.")                            
 
     # ==========================================
-    # 4. EMPLOYEE VIEW (SCALABLE & COLLISION-SAFE)
-    # ==========================================
-    elif st.session_state.role == "Employee":
-        tab1, tab2 = st.tabs(["🚀 Active Tasks", "📜 My Reports"])
+# 4. EMPLOYEE VIEW (SCALABLE & COLLISION-SAFE)
+# ==========================================
+elif st.session_state.role == "Employee":
+    # Define tabs at the top level of the Employee role
+    tab1, tab2 = st.tabs(["🚀 Active Tasks", "📜 My Reports"])
+    
+    # --- TAB 1: ACTIVE TASKS ---
+    with tab1:
+        st.title(f"👷 {st.session_state.user}'s Workspace")
         
-        with tab1:
-            st.title(f"👷 {st.session_state.user}'s Workspace")
-            
-            # 1. Fetch data (Uses 10-min cache)
-            df = get_tasks()
-            
-            # 2. Filter: Only this user, not finished, and due today or earlier
-            today_str = get_now_ist().strftime("%Y-%m-%d")
-            active_tasks = df[
-                (df["Employee"] == st.session_state.user) & 
-                (df["Status"] != "Finished") &
-                (df["Scheduled_Date"] <= today_str)
-            ].copy()
-            
-            if active_tasks.empty:
-                st.info("No active tasks for today. Take a breather! ☕")
-            
-            for idx, row in active_tasks.iterrows():
-                with st.container(border=True):
-                    # UI Header
-                    c_top1, c_top2 = st.columns([3, 1])
-                    c_top1.subheader(f"🏢 {row['Company']}")
-                    c_top2.write(f"⏱️ **{row['Limit_Mins']}m**")
-                    st.write(f"**Task:** {row['Task']}")
+        # 1. Fetch data
+        df = get_tasks()
+        
+        # 2. Filter: Only this user, not finished, and due today or earlier
+        today_str = get_now_ist().strftime("%Y-%m-%d")
+        active_tasks = df[
+            (df["Employee"] == st.session_state.user) & 
+            (df["Status"] != "Finished") &
+            (df["Scheduled_Date"] <= today_str)
+        ].copy()
+        
+        if active_tasks.empty:
+            st.info("No active tasks for today. Take a breather! ☕")
+        
+        for idx, row in active_tasks.iterrows():
+            with st.container(border=True):
+                # UI Header
+                c_top1, c_top2 = st.columns([3, 1])
+                c_top1.subheader(f"🏢 {row['Company']}")
+                c_top2.write(f"⏱️ **{row['Limit_Mins']}m**")
+                st.write(f"**Task:** {row['Task']}")
 
-                    # --- 1. PENDING STATUS ---
-                    if row["Status"] == "Pending":
-                        if st.button("▶️ START TASK", key=f"start_{idx}", use_container_width=True, type="primary"):
-                            # REFRESH MASTER DB BEFORE UPDATING
-                            master_df = get_tasks()
-                            m_idx = master_df[(master_df['Employee'] == row['Employee']) & (master_df['Assign_Time'] == row['Assign_Time'])].index
+                # --- STATUS LOGIC: PENDING ---
+                if row["Status"] == "Pending":
+                    if st.button("▶️ START TASK", key=f"start_{idx}", use_container_width=True, type="primary"):
+                        master_df = get_tasks()
+                        m_idx = master_df[(master_df['Employee'] == row['Employee']) & (master_df['Assign_Time'] == row['Assign_Time'])].index
+                        
+                        if not m_idx.empty:
+                            now = get_now_ist().replace(tzinfo=None)
+                            mins_val = int(float(str(row["Limit_Mins"])))
+                            deadline = now + timedelta(minutes=mins_val)
                             
-                            if not m_idx.empty:
-                                now = get_now_ist().replace(tzinfo=None)
-                                mins_val = int(float(str(row["Limit_Mins"])))
-                                deadline = now + timedelta(minutes=mins_val)
-                                
-                                master_df.at[m_idx[0], "Start_Time"] = now.strftime("%Y-%m-%d %I:%M:%S %p")
-                                master_df.at[m_idx[0], "Deadline"] = deadline.strftime("%Y-%m-%d %I:%M:%S %p")
-                                master_df.at[m_idx[0], "Status"] = "Running"
-                                
-                                save_tasks(master_df)
-                                st.rerun()
+                            master_df.at[m_idx[0], "Start_Time"] = now.strftime("%Y-%m-%d %I:%M:%S %p")
+                            master_df.at[m_idx[0], "Deadline"] = deadline.strftime("%Y-%m-%d %I:%M:%S %p")
+                            master_df.at[m_idx[0], "Status"] = "Running"
+                            
+                            save_tasks(master_df)
+                            st.rerun()
 
-                            # ==========================================
-                            # 4. EMPLOYEE DASHBOARD (RUNNING & HISTORY)
-                            # ==========================================
+                # --- STATUS LOGIC: RUNNING ---
+                elif row["Status"] == "Running":
+                    # LIVE TIMER
+                    if not st.session_state.get(f"finish_mode_{idx}", False):
+                        render_timer(row["Deadline"])
+                    else:
+                        st.warning("⚠️ Timer paused for submission.")
 
-                            # --- 2. RUNNING STATUS ---
-                            elif row["Status"] == "Running":
-                                # LIVE TIMER
-                                if not st.session_state.get(f"finish_mode_{idx}", False):
-                                    render_timer(row["Deadline"])
-                                else:
-                                    st.warning("⚠️ Timer paused for submission.")
+                    col_p, col_f = st.columns(2)
+                    
+                    # Pause Logic
+                    if col_p.button("⏸️ PAUSE", key=f"pause_{idx}", use_container_width=True):
+                        master_df = get_tasks()
+                        m_idx = master_df[(master_df['Employee'] == row['Employee']) & (master_df['Assign_Time'] == row['Assign_Time'])].index
+                        if not m_idx.empty:
+                            now_str = get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p")
+                            master_df.at[m_idx[0], "Pause_Start"] = now_str
+                            master_df.at[m_idx[0], "Status"] = "Paused"
+                            
+                            try:
+                                p_count = int(float(str(row.get("Pause_Count", 0))))
+                            except:
+                                p_count = 0
+                            master_df.at[m_idx[0], "Pause_Count"] = str(p_count + 1)
+                            
+                            save_tasks(master_df)
+                            st.rerun()
 
-                                col_p, col_f = st.columns(2)
+                    # Finish Initiation
+                    if col_f.button("✅ FINISH", key=f"fin_btn_{idx}", use_container_width=True):
+                        st.session_state[f"finish_time_{idx}"] = get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p")
+                        st.session_state[f"finish_mode_{idx}"] = True
+                        st.rerun()
+
+                    # Submission Form
+                    if st.session_state.get(f"finish_mode_{idx}", False):
+                        with st.form(key=f"form_{idx}"):
+                            frozen_time = st.session_state.get(f"finish_time_{idx}")
+                            st.info(f"Submitting at: {frozen_time}")
+                            remarks = st.text_area("What was done?", placeholder="Enter remarks...")
+                            
+                            if st.form_submit_button("Submit to Admin"):
+                                master_df = get_tasks()
+                                m_idx = master_df[(master_df['Employee'] == row['Employee']) & (master_df['Assign_Time'] == row['Assign_Time'])].index
                                 
-                                # --- PAUSE LOGIC ---
-                                if col_p.button("⏸️ PAUSE", key=f"pause_{idx}", use_container_width=True):
-                                    master_df = get_tasks()
-                                    m_idx = master_df[(master_df['Employee'] == row['Employee']) & (master_df['Assign_Time'] == row['Assign_Time'])].index
+                                if not m_idx.empty:
+                                    f_dt = to_dt(frozen_time).replace(tzinfo=None)
+                                    d_dt = to_dt(row["Deadline"]).replace(tzinfo=None)
+                                    var_sec = int((f_dt - d_dt).total_seconds())
                                     
-                                    if not m_idx.empty:
-                                        now_str = get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p")
-                                        master_df.at[m_idx[0], "Pause_Start"] = now_str
-                                        master_df.at[m_idx[0], "Status"] = "Paused"
-                                        
-                                        # Increment Pause Count safely
-                                        try:
-                                            p_count = int(float(str(row.get("Pause_Count", 0))))
-                                        except:
-                                            p_count = 0
-                                        master_df.at[m_idx[0], "Pause_Count"] = str(p_count + 1)
-                                        
-                                        save_tasks(master_df)
-                                        st.rerun()
+                                    abs_v = abs(var_sec)
+                                    v_str = f"{'+' if var_sec > 0 else '-'}{abs_v//60:02d}:{abs_v%60:02d}"
+                                    flag = "🟢 GREEN" if var_sec <= 0 else "🔴 RED"
                                     
-                                # --- FINISH INITIATION ---
-                                if col_f.button("✅ FINISH", key=f"fin_btn_{idx}", use_container_width=True):
-                                    st.session_state[f"finish_time_{idx}"] = get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p")
-                                    st.session_state[f"finish_mode_{idx}"] = True
+                                    target = m_idx[0]
+                                    master_df.at[target, "Status"] = "Finished"
+                                    master_df.at[target, "Submit_Time"] = frozen_time
+                                    master_df.at[target, "Time_Variance"] = v_str
+                                    master_df.at[target, "Flag"] = flag
+                                    master_df.at[target, "Remarks"] = remarks.replace(",", ";")
+                                    
+                                    save_tasks(master_df)
+                                    handle_recurring_tasks(master_df.iloc[target])
+                                    del st.session_state[f"finish_mode_{idx}"]
+                                    st.success("Task Logged Successfully!")
+                                    time.sleep(1)
                                     st.rerun()
 
-                                # --- SUBMISSION FORM AREA ---
-                                if st.session_state.get(f"finish_mode_{idx}", False):
-                                    with st.form(key=f"form_{idx}"):
-                                        frozen_time = st.session_state.get(f"finish_time_{idx}")
-                                        st.info(f"Submitting at: {frozen_time}")
-                                        remarks = st.text_area("What was done?", placeholder="Enter remarks...")
-                                        
-                                        if st.form_submit_button("Submit to Admin"):
-                                            master_df = get_tasks()
-                                            m_idx = master_df[(master_df['Employee'] == row['Employee']) & (master_df['Assign_Time'] == row['Assign_Time'])].index
-                                            
-                                            if not m_idx.empty:
-                                                # Time Variance Logic (IST Naive)
-                                                f_dt = to_dt(frozen_time).replace(tzinfo=None)
-                                                d_dt = to_dt(row["Deadline"]).replace(tzinfo=None)
-                                                var_sec = int((f_dt - d_dt).total_seconds())
-                                                
-                                                abs_v = abs(var_sec)
-                                                v_str = f"{'+' if var_sec > 0 else '-'}{abs_v//60:02d}:{abs_v%60:02d}"
-                                                flag = "🟢 GREEN" if var_sec <= 0 else "🔴 RED"
-                                                
-                                                target = m_idx[0]
-                                                master_df.at[target, "Status"] = "Finished"
-                                                master_df.at[target, "Submit_Time"] = frozen_time
-                                                master_df.at[target, "Time_Variance"] = v_str
-                                                master_df.at[target, "Flag"] = flag
-                                                master_df.at[target, "Remarks"] = remarks.replace(",", ";")
-                                                
-                                                save_tasks(master_df)
-                                                handle_recurring_tasks(master_df.iloc[target])
-                                                
-                                                # Cleanup Session
-                                                del st.session_state[f"finish_mode_{idx}"]
-                                                st.success("Task Logged Successfully!")
-                                                time.sleep(1)
-                                                st.rerun()
+                # --- STATUS LOGIC: PAUSED ---
+                elif row["Status"] == "Paused":
+                    st.warning("☕ Status: On Break")
+                    if st.button("▶️ RESUME TASK", key=f"res_{idx}", use_container_width=True, type="primary"):
+                        master_df = get_tasks()
+                        m_idx = master_df[(master_df['Employee'] == row['Employee']) & (master_df['Assign_Time'] == row['Assign_Time'])].index
+                        if not m_idx.empty:
+                            target = m_idx[0]
+                            now = get_now_ist().replace(tzinfo=None)
+                            p_start = to_dt(row.get("Pause_Start")).replace(tzinfo=None)
+                            pause_dur = now - p_start
+                            
+                            try:
+                                prev_p = float(row.get("Total_Paused_Mins", 0))
+                            except:
+                                prev_p = 0.0
+                            
+                            master_df.at[target, "Total_Paused_Mins"] = str(round(prev_p + (pause_dur.total_seconds()/60), 2))
+                            old_d = to_dt(row.get("Deadline")).replace(tzinfo=None)
+                            master_df.at[target, "Deadline"] = (old_d + pause_dur).strftime("%Y-%m-%d %I:%M:%S %p")
+                            master_df.at[target, "Status"] = "Running"
+                            master_df.at[target, "Pause_Start"] = "N/A"
+                            
+                            save_tasks(master_df)
+                            st.rerun()
 
-                            # --- 3. PAUSED STATUS ---
-                            elif row["Status"] == "Paused":
-                                st.warning("☕ Status: On Break")
-                                if st.button("▶️ RESUME TASK", key=f"res_{idx}", use_container_width=True, type="primary"):
-                                    master_df = get_tasks()
-                                    m_idx = master_df[(master_df['Employee'] == row['Employee']) & (master_df['Assign_Time'] == row['Assign_Time'])].index
-                                    
-                                    if not m_idx.empty:
-                                        target = m_idx[0]
-                                        now = get_now_ist().replace(tzinfo=None)
-                                        p_start = to_dt(row.get("Pause_Start")).replace(tzinfo=None)
-                                        
-                                        # Duration Calculation
-                                        pause_dur = now - p_start
-                                        
-                                        # Update Total Pause Time
-                                        try:
-                                            prev_p = float(row.get("Total_Paused_Mins", 0))
-                                        except:
-                                            prev_p = 0.0
-                                        master_df.at[target, "Total_Paused_Mins"] = str(round(prev_p + (pause_dur.total_seconds()/60), 2))
-                                        
-                                        # Shift Deadline forward by the amount of time spent paused
-                                        old_d = to_dt(row.get("Deadline")).replace(tzinfo=None)
-                                        master_df.at[target, "Deadline"] = (old_d + pause_dur).strftime("%Y-%m-%d %I:%M:%S %p")
-                                        
-                                        master_df.at[target, "Status"] = "Running"
-                                        master_df.at[target, "Pause_Start"] = "N/A"
-                                        
-                                        save_tasks(master_df)
-                                        st.rerun()
+            # --- TAB 2: WORK HISTORY ---
+            with tab2:
+                st.title("📊 My Work History")
+                df_raw = get_tasks()
+                
+                if df_raw.empty:
+                    st.info("No records found.")
+                else:
+                    my_history = df_raw[df_raw["Employee"] == st.session_state.user].copy()
+                    
+                    if my_history.empty:
+                        st.info("No history found for your account yet.")
+                    else:
+                        rep_type = st.radio("View Period", ["Today", "Last 30 Days", "All Time"], horizontal=True)
 
-                            # ==========================================
-                            # 5. TAB 2: WORK HISTORY (CLEANED)
-                            # ==========================================
-                            with tab2:
-                                st.title("📊 My Work History")
-                                
-                                df_raw = get_tasks()
-                                
-                                if df_raw.empty:
-                                    st.info("No records found.")
-                                else:
-                                    # Fixed: Removed the triple bracket error here
-                                    my_history = df_raw[df_raw["Employee"] == st.session_state.user].copy()
-                                    
-                                    if my_history.empty:
-                                        st.info("No history found for your account yet.")
-                                    else:
-                                        rep_type = st.radio("View Period", ["Today", "Last 30 Days", "All Time"], horizontal=True)
+                        # Timezone-Safe Filtering
+                        my_history['Assign_DT'] = pd.to_datetime(my_history['Assign_Time'], errors='coerce').dt.tz_localize(None)
+                        my_history = my_history.dropna(subset=['Assign_DT'])
+                        
+                        now_naive = get_now_ist().replace(tzinfo=None)
+                        if rep_type == "Today":
+                            since_date = now_naive.replace(hour=0, minute=0, second=0, microsecond=0)
+                        elif rep_type == "Last 30 Days":
+                            since_date = now_naive - timedelta(days=30)
+                        else:
+                            since_date = datetime(2000, 1, 1)
 
-                                        # --- TIMEZONE-SAFE FILTERING ---
-                                        my_history['Assign_DT'] = pd.to_datetime(my_history['Assign_Time'], errors='coerce').dt.tz_localize(None)
-                                        my_history = my_history.dropna(subset=['Assign_DT'])
-                                        
-                                        now_naive = get_now_ist().replace(tzinfo=None)
-                                        today_start = now_naive.replace(hour=0, minute=0, second=0, microsecond=0)
-                                        
-                                        if rep_type == "Today":
-                                            since_date = today_start
-                                        elif rep_type == "Last 30 Days":
-                                            since_date = now_naive - timedelta(days=30)
-                                        else:
-                                            since_date = datetime(2000, 1, 1)
+                        report_df = my_history[my_history["Assign_DT"] >= since_date].copy()
 
-                                        # Final Filtered Data
-                                        report_df = my_history[my_history["Assign_DT"] >= since_date].copy()
-                                        st.dataframe(report_df.drop(columns=['Assign_DT']), use_container_width=True)
-                                
-                                # ==========================================
-                                # 6. NET WORK HOURS & METRICS (INSIDE TAB 2)
-                                # ==========================================
+                        if not report_df.empty:
+                            # Net Hours Calculation Function
+                            def get_net_hours(r):
+                                s = to_dt(str(r.get('Start_Time', 'N/A')))
+                                f = to_dt(str(r.get('Submit_Time', 'N/A')))
+                                if s and f:
+                                    s, f = s.replace(tzinfo=None), f.replace(tzinfo=None)
+                                    gross_hrs = (f - s).total_seconds() / 3600
+                                    try:
+                                        p_val = r.get("Total_Paused_Mins", 0)
+                                        p_hrs = float(p_val) / 60 if p_val and str(p_val) != "N/A" else 0.0
+                                    except:
+                                        p_hrs = 0.0
+                                    return round(max(0, gross_hrs - p_hrs), 2)
+                                return 0.0
 
-                                # --- HELPER: NET WORK HOURS CALCULATION ---
-                                def get_net_hours(r):
-                                    """Calculates hours between Start and Submit, minus pause time."""
-                                    # Convert strings to naive datetimes using the to_dt helper
-                                    s = to_dt(str(r.get('Start_Time', 'N/A')))
-                                    f = to_dt(str(r.get('Submit_Time', 'N/A')))
-                                    
-                                    if s and f:
-                                        s, f = s.replace(tzinfo=None), f.replace(tzinfo=None)
-                                        # Gross hours (decimal)
-                                        gross_hrs = (f - s).total_seconds() / 3600
-                                        
-                                        # Subtract pause time
-                                        try:
-                                            p_val = r.get("Total_Paused_Mins", 0)
-                                            # Handle N/A or empty strings in the pause column
-                                            if not p_val or str(p_val).strip() in ["N/A", "None", ""]:
-                                                p_hrs = 0.0
-                                            else:
-                                                p_hrs = float(p_val) / 60
-                                        except (ValueError, TypeError):
-                                            p_hrs = 0.0
-                                            
-                                        return round(max(0, gross_hrs - p_hrs), 2)
-                                    return 0.0
-
-                                # --- METRICS DISPLAY LOGIC ---
-                                if not report_df.empty:
-                                    # 1. Apply calculation to create a new column
-                                    report_df['Net_Hours'] = report_df.apply(get_net_hours, axis=1)
-                                    
-                                    # 2. Numeric safety for aggregate metrics
-                                    # We use pd.to_numeric with 'coerce' to turn bad data into NaN, then fill with 0
-                                    p_counts = pd.to_numeric(report_df['Pause_Count'], errors='coerce').fillna(0)
-                                    p_mins = pd.to_numeric(report_df['Total_Paused_Mins'], errors='coerce').fillna(0)
-                                    
-                                    # 3. Summary Metrics UI
-                                    st.markdown("### 📈 Performance Summary")
-                                    m1, m2, m3 = st.columns(3)
-                                    
-                                    total_hrs = report_df['Net_Hours'].sum()
-                                    total_pauses = int(p_counts.sum())
-                                    total_pause_mins = p_mins.sum()
-                                    
-                                    m1.metric("Net Work Time", f"{total_hrs:.2f} hrs")
-                                    m2.metric("Total Pauses", f"{total_pauses}")
-                                    m3.metric("Pause Duration", f"{total_pause_mins:.1f} mins")
-                                    
-                                    st.write("---")
-                                    
-                                    # 4. Cleanup for display
-                                    # We only show columns that are useful to the employee
-                                    display_cols = [
-                                        "Company", "Task", "Status", "Assign_Time", 
-                                        "Submit_Time", "Net_Hours", "Flag", "Remarks"
-                                    ]
-                                    
-                                    # Ensure Assign_DT exists for sorting (most recent at top)
-                                    if 'Assign_DT' not in report_df.columns:
-                                        report_df['Assign_DT'] = pd.to_datetime(report_df['Assign_Time'], errors='coerce')
-                                    
-                                    report_df = report_df.sort_values("Assign_DT", ascending=False)
-                                    
-                                    # 5. Interactive Dataframe
-                                    st.dataframe(
-                                        report_df[display_cols], 
-                                        use_container_width=True,
-                                        hide_index=True,
-                                        column_config={
-                                            "Net_Hours": st.column_config.NumberColumn("Hours Worked", format="%.2f hrs"),
-                                            "Flag": st.column_config.TextColumn("Status Flag"),
-                                            "Assign_Time": "Assigned At",
-                                            "Submit_Time": "Completed At"
-                                        }
-                                    )
-                                else:
-                                    st.info("No completed tasks found for the selected period.")
+                            report_df['Net_Hours'] = report_df.apply(get_net_hours, axis=1)
+                            
+                            # Metrics Summary
+                            st.markdown("### 📈 Performance Summary")
+                            m1, m2, m3 = st.columns(3)
+                            p_mins = pd.to_numeric(report_df['Total_Paused_Mins'], errors='coerce').fillna(0)
+                            
+                            m1.metric("Net Work Time", f"{report_df['Net_Hours'].sum():.2f} hrs")
+                            m2.metric("Total Tasks", len(report_df[report_df["Status"] == "Finished"]))
+                            m3.metric("Pause Duration", f"{p_mins.sum():.1f} mins")
+                            
+                            st.write("---")
+                            
+                            # Data Display
+                            display_cols = ["Company", "Task", "Status", "Assign_Time", "Submit_Time", "Net_Hours", "Flag", "Remarks"]
+                            report_df = report_df.sort_values("Assign_DT", ascending=False)
+                            
+                            st.dataframe(
+                                report_df[display_cols], 
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "Net_Hours": st.column_config.NumberColumn("Hours", format="%.2f hrs"),
+                                    "Flag": "Performance"
+                                }
+                            )
+                        else:
+                            st.info("No tasks found for this period.")
