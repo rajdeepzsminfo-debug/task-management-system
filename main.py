@@ -722,25 +722,38 @@ elif st.session_state.role == "Employee":
                         if my_history.empty:
                             st.info("No records found for your account.")
                         else:
-                            # --- THE CRITICAL FIX ---
-                            
+                            # Selection for View Period
                             rep_type = st.radio("Select View Period", ["Daily (Today)", "Monthly (30 Days)"], horizontal=True)
-                            # Force Assign_Time into a Datetime format so the >= comparison works
-                            my_history['Assign_DT'] = pd.to_datetime(my_history['Assign_Time'], errors='coerce')
+
+                            # --- THE CRITICAL FIX: Timezone Normalization ---
                             
-                            # Remove any rows that have broken dates (NaT) to prevent the TypeError
+                            # A. Convert column to datetime and strip timezone info (make it naive)
+                            my_history['Assign_DT'] = pd.to_datetime(my_history['Assign_Time'], errors='coerce').dt.tz_localize(None)
+                            
+                            # B. Remove rows with broken dates
                             my_history = my_history.dropna(subset=['Assign_DT'])
-                            now_naive = get_now_ist().replace(tzinfo=None)
-                            # Ensure since_date is a datetime for the comparison
-                            today_start = get_now_ist().replace(hour=0, minute=0, second=0, microsecond=0)
-                            since_date = today_start if "Daily" in rep_type else (get_now_ist() - timedelta(days=30))
                             
-                            # Now this comparison is safe because both sides are Datetime types
+                            # C. Get current time and strip timezone info to match the dataframe
+                            now_naive = get_now_ist().replace(tzinfo=None)
+                            today_start = now_naive.replace(hour=0, minute=0, second=0, microsecond=0)
+                            
+                            # D. Calculate the filter date (also naive)
+                            since_date = today_start if "Daily" in rep_type else (now_naive - timedelta(days=30))
+                            
+                            # E. Safe comparison (Naive vs Naive)
                             report_df = my_history[my_history["Assign_DT"] >= since_date].copy()
                             
                             def get_work_hours(r):
-                                s, f = to_dt(str(r.get('Start_Time', 'N/A'))), to_dt(str(r.get('Submit_Time', 'N/A')))
+                                # Ensure we handle data as strings for the to_dt function
+                                s_str = str(r.get('Start_Time', 'N/A'))
+                                f_str = str(r.get('Submit_Time', 'N/A'))
+                                s, f = to_dt(s_str), to_dt(f_str)
+                                
                                 if s and f:
+                                    # Strip timezones if to_dt returns aware objects
+                                    if s.tzinfo: s = s.replace(tzinfo=None)
+                                    if f.tzinfo: f = f.replace(tzinfo=None)
+                                        
                                     total_hrs = (f - s).total_seconds() / 3600
                                     try:
                                         p_val = r.get("Total_Paused_Mins", 0)
@@ -751,6 +764,7 @@ elif st.session_state.role == "Employee":
                                 return 0.0
 
                             if not report_df.empty:
+                                # Calculate hours per task
                                 report_df['Hours'] = report_df.apply(get_work_hours, axis=1)
                                 
                                 # Metrics with numeric conversion safety
@@ -762,6 +776,7 @@ elif st.session_state.role == "Employee":
                                 c2.metric("Total Pauses", f"{int(p_counts.sum())}")
                                 c3.metric("Total Pause Time", f"{p_mins.sum():.2f} mins")
                                 
+                                # Column selection for display
                                 cols_to_show = ["Company", "Task", "Assign_Time", "Submit_Time", "Hours", 
                                                 "Pause_Count", "Total_Paused_Mins", "Flag", "Remarks"]
                                 
