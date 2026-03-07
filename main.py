@@ -670,7 +670,7 @@ elif st.session_state.role == "Employee":
                             
                             # Only perform math if p_start was successfully converted
                             if p_start and isinstance(p_start, datetime):
-                                pause_dur = now-p_start
+                                pause_dur = now - p_start
                                 mins_paused = pause_dur.total_seconds() / 60
                                 
                                 try:
