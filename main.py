@@ -5,7 +5,21 @@ from streamlit_autorefresh import st_autorefresh
 from datetime import datetime, timedelta
 import pytz
 import time
-
+def render_timer(deadline_str):
+    """Calculates and displays the countdown timer."""
+    try:
+        now = get_now_ist().replace(tzinfo=None)
+        deadline = to_dt(deadline_str).replace(tzinfo=None)
+        diff = deadline - now
+        
+        if diff.total_seconds() > 0:
+            hours, remainder = divmod(int(diff.total_seconds()), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            st.error(f"⏳ Time Remaining: {hours:02d}:{minutes:02d}:{seconds:02d}")
+        else:
+            st.warning("⚠️ Deadline Passed!")
+    except Exception:
+        st.error("Timer Error")
 # ==========================================
 # 1. PAGE CONFIG & GLOBAL SETTINGS
 # ==========================================
