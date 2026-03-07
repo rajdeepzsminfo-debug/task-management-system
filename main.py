@@ -664,9 +664,15 @@ elif st.session_state.role == "Employee":
                             
                             # --- THE FIX: Convert String to Datetime safely ---
                             p_start_val = row.get("Pause_Start", "N/A")
-                            p_start = None
-                            if p_start_val != "N/A":
-                                p_start = to_dt(str(p_start_val))
+
+                            # Change: Directly convert and validate in one step to ensure it's not a string during subtraction
+                            p_start = to_dt(str(p_start_val)) if p_start_val != "N/A" else None
+
+                            now = get_now_ist()
+
+                            # Only perform math if p_start is a valid datetime object
+                            if p_start and isinstance(p_start, datetime):
+                                pause_dur = now - p_start  # This will no longer throw a TypeError
                             
                             now = get_now_ist()
                             
@@ -717,14 +723,14 @@ elif st.session_state.role == "Employee":
                             st.info("No records found for your account.")
                         else:
                             # --- THE CRITICAL FIX ---
+                            
+                            rep_type = st.radio("Select View Period", ["Daily (Today)", "Monthly (30 Days)"], horizontal=True)
                             # Force Assign_Time into a Datetime format so the >= comparison works
                             my_history['Assign_DT'] = pd.to_datetime(my_history['Assign_Time'], errors='coerce')
                             
                             # Remove any rows that have broken dates (NaT) to prevent the TypeError
                             my_history = my_history.dropna(subset=['Assign_DT'])
-
-                            rep_type = st.radio("Select View Period", ["Daily (Today)", "Monthly (30 Days)"], horizontal=True)
-                            
+                            now_naive = get_now_ist().replace(tzinfo=None)
                             # Ensure since_date is a datetime for the comparison
                             today_start = get_now_ist().replace(hour=0, minute=0, second=0, microsecond=0)
                             since_date = today_start if "Daily" in rep_type else (get_now_ist() - timedelta(days=30))
