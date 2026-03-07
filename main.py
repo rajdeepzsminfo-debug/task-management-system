@@ -653,45 +653,45 @@ elif st.session_state.role == "Employee":
                 elif row["Status"] == "Paused":
                     st.warning("☕ TASK PAUSED")
                     if st.button("▶️ RESUME", key=f"r_{idx}", use_container_width=True):
-                        # 1. Fetch fresh data from Cloud
+                        # Fetch fresh data from the cloud
                         df = get_tasks()
                         
-                        # Match the specific row
+                        # Match the specific row using Employee and Assign_Time
                         match_idx = df[(df['Employee'] == row['Employee']) & (df['Assign_Time'] == row['Assign_Time'])].index
                         
                         if not match_idx.empty:
                             target_idx = match_idx[0]
                             
                             # --- THE FIX: Convert String to Datetime safely ---
-                            p_start_raw = row.get("Pause_Start", "N/A")
-                            p_start = to_dt(str(p_start_raw)) # Ensure it's a string for the function
+                            p_start_val = row.get("Pause_Start", "N/A")
+                            p_start = to_dt(str(p_start_val)) 
                             
                             now = get_now_ist()
                             
-                            # Only perform math if p_start was successfully converted
+                            # Check if p_start is a valid datetime object before math
                             if p_start and isinstance(p_start, datetime):
                                 pause_dur = now - p_start
                                 mins_paused = pause_dur.total_seconds() / 60
                                 
                                 try:
-                                    # Convert previous pauses to float safely
+                                    # Convert existing total pause time to float safely
                                     prev_total = row.get("Total_Paused_Mins", 0)
                                     current_total = float(str(prev_total)) if prev_total and str(prev_total) != "N/A" else 0.0
                                 except:
                                     current_total = 0.0
                                     
-                                # Update total paused minutes
+                                # Update total paused minutes in the dataframe
                                 df.at[target_idx, "Total_Paused_Mins"] = str(round(current_total + mins_paused, 2))
                                 
-                                # Push the deadline forward
-                                old_deadline_raw = row.get("Deadline", "N/A")
-                                old_deadline = to_dt(str(old_deadline_raw))
+                                # Push the deadline forward by the duration of the pause
+                                old_deadline_val = row.get("Deadline", "N/A")
+                                old_deadline = to_dt(str(old_deadline_val))
                                 
                                 if old_deadline:
                                     new_deadline = old_deadline + pause_dur
                                     df.at[target_idx, "Deadline"] = new_deadline.strftime("%Y-%m-%d %I:%M:%S %p")
                             
-                            # Reset status to Running
+                            # Reset status and clear pause start time
                             df.at[target_idx, "Status"] = "Running"
                             df.at[target_idx, "Pause_Start"] = "N/A"
                             
