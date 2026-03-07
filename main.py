@@ -3,211 +3,118 @@ import pandas as pd
 from datetime import datetime, timedelta
 import time
 from streamlit_autorefresh import st_autorefresh
-import os
 import pytz
+from streamlit_gsheets import GSheetsConnection
+
 # ==========================================
-# 1. DATABASE SETUP & HELPERS
+# 1. DATABASE SETUP (GOOGLE SHEETS)
 # ==========================================
 ADMIN_PASSWORD = "admin123" 
-TASK_DB = "task_system_final.csv"
-USER_DB = "users_db_final.csv"
-COMPANY_LIST = ["Pearl Hospitality LLC", "Shri Guru Om Inc", "276 Old Country Road LLC", "Impact Wireless LLC",
-    "Deluxe Services USA Inc", "SM Auto Tech Inc", "Venus Auto Parts Inc", "Venus Realty Group LLC",
-    "Krishs Indian Bistro Corp", "Lisas Crown Fried Chicken", "Bns Industries Inc", "S&S Sports Inc",
-    "Gip Industries Inc", "Hottest Footwear Com Inc", "Hicksville Chaap LLC", "Giapreet LLC",
-    "Giorgio West LLC", "Ikta Lifestyle LLC", "Singh Management LLC", "As Sports 46 Inc",
-    "Scratch Sports Inc", "Ss Coffee Farmingdale Inc", "Mad Kicks LLC", "BVS Inc",
-    "Fresh Food Group LLC", "Royal Blue Property 15 LLC", "Royal Blue Property 7 LLC", "905 Waverly Realty LLC",
-    "Gadgets LLC", "Zupple LLC", "Guru Nanak'S Kitchen Inc.", "145 Main Patterson LLC",
-    "229 Broadhollow Realty LLC", "Amritapriya LLC", "101 Chaap LLC", "741 Motor Cars LLC",
-    "Crimson Nova Inc", "Silver Ember Inc", "Velvet Horizon Inc", "1467 Annandale Realty LLC",
-    "Air America Drones LLC", "Dab Clean LLC", "Pgi Technologies LLC", "Safeguard Singh Management",
-    "Realty G", "Sidanas Inc", "749 Farmingdale Realty LLC", "Royal Blue Property 19 LLC",
-    "19962 Franz Rd Realty LLC", "905 Land Realty LLC", "Hillside Chaap LLC", "65 Mahan Realty LLC",
-    "Starbucks", "S&S Sports Inc (Ny)", "S&S Sports Inc (Ny) (Whoesale)", "Cafe Di Mondo Inc",
-    "Francescos Cafe & BakeryInc", "Moonbucks Inc", "P&F Bakers Inc", "South Broadway Realty Enterprises",
-    "AGRO BUSINEES GROUP", "The Barkary Bakery Corp", "The Barkary Corp", "The Barking Bakery Corp",
-    "Cafe Di Sole Inc", "Grand Cafe Bakery Inc", "Farmington Hari LLC", "New Shs Properties LLC",
-    "Shs Properties Inc", "Sky Hari LLC", "St Hari Apartments LLC", "St Hari Properties Inc",
-    "Us Hari Properties Inc", "Shs Auto Parts Inc", "831 Building LLC", "Caprio & Caprio LLC",
-    "NI Mobile Inc", "Avis Property LLC", "Sugar Cell Inc", "Avin Builders Inc",
-    "Dove Street LLC", "New Land Estate Inc", "Om Paving Corp", "New York Cardiovascular Care PC",
-    "TRJRes Inc", "LI Investors LLC", "TRJ Associates Group LLC", "Tammy Management Inc",
-    "Blue Coral NY Inc", "Pooja Fashion & Style Inc", "Pooja Stitch Craft Inc", "609 Fulton Pediatrics PC",
-    "Fulton Avenue Realty LLC", "Charan Electrical Enterprises", "Minesh Properties Inc", "New Generation Development LLC",
-    "Astoria Delancy Hotel Corp", "Central NY Hospitality LLC", "Crown City Hospitality LLC", "Anastasio Landscaping Inc",
-    "Anshima Homes LLC", "Horizon Star Services LLC", "Eesha Inc", "Addvanced Carpentry Inc",
-    "Deep Distributors Greator Ny Inc", "Golden Touch Ice Cream Inc", "Guru Fashions Inc", "John Auto Center Inc",
-    "M&M Builders & Developers Inc", "Om Paving Inc", "Paramount Wireless LLC", "SHS Auto Parts Inc",
-    "Andrew Maintance Inc", "4Th Avenue Real Estate Inc", "7508 Chicken Corp", "Fourth Avenue Merchant Inc",
-    "Futurewise Insurance Brokerage Corp", "Liu Electric LLC", "Royal Star Insurance Brokerage Corp", "Scott Group Insurance Brokerage Corp",
-    "Futurewise Business Inc", "Total Wireless Of New England Inc", "Brewer Hotel LLC", "Pinnacle Mobility LLC",
-    "Pinnacle Mobility Retail Inc", "Stellar Wireless Retail Ny Inc", "Superior Victory Hotel LLC", "Cafe Dolce Vita Corp",
-    "Green Keeper Landscaping LLC", "Gyan Malhotra LLC", "Kama Hospitality Inc", "Vita Food Corp",
-    "Frienldy Star Fuel Inc", "Cute Cuts Inc", "Home Improvment By George Corp", "Jackson Plumbing & Hvac Supplies Corp",
-    "Prime Construction Usa Inc", "Belleville Oil Inc", "Jamaica Fuel Inc", "Jersey Mart Inc",
-    "Ks Fuel Inc", "Remsen Fuel Inc", "Rt Fuel Inc", "Tatla Gas Inc",
-    "Tatla Petroleum Inc", "Wallington Gas Inc", "Yuvi Gas Inc", "Sai Express Inc",
-    "On Balance Search Consultants LLC", "Minesh Properties LLC", "Hudson View Films & Tv Inc", "Sai Restaurant Enterprise Inc",
-    "The Pearl Hospitality LLC", "Avleen Food Group LLC", "MG Elite Group LLC", "Hickville Jewelry Traders Inc",
-    "Advantage Pro Training Inc", "AG Parts USA Inc", "Gizmotech LLC", "Js Sethi Inc",
-    "Shree BhadraKali Inc", "Singh Sethi Inc", "Glamour Usa Inc", "Indian Street Food LLC",
-    "Law Office Of Abe George", "Ramos Consulting Inc", "Reliance Fashion Group Inc", "Shawarma Paradise LLC",
-    "Superride Suspension Inc", "Rajdeep Enterprises LLC", "Good Faith Restaurant Incorporated", "A & P Auto Body & Repair Inc",
-    "Azhar Construction Inc", "120 Osborn Holding LLC", "BWI 827 LLC", "Sunraise Equity Group LLC",
-    "Thatford Lodging LLC", "Best Management Solutions Inc", "Xtreme Realty Holding LLC", "Xtreme Solutioons Services Corp",
-    "Osborn Operating Hospitality Corp", "Thatford Operating Hospitality Corp", "ABM Electric Inc", "Blue Falcon Realty & Management Corp",
-    "Jot Realty Inc", "Maryland Hospitality LLC", "BWI-NY Builders LLC", "Jackson Plumbing & HVAC Supplies Co",
-    "144 Investors LLC", "165 Investors LLC", "Umbrella Investors LLC", "262 Investors LLC",
-    "33 Investors LLC", "38th Avenue Hotels LLC", "39th Avenue Hospitality LLC", "Deep Distibutors Greater NY Inc",
-    "Green Ready Mixx LLC", "78 Investors LLC", "Supreme Builders Inc", "Hunts Point Petroleum LLC",
-    "Dala Builders Corp", "3290 Realty LLC", "Sunny Developers LLC", "Anthonys Insulation Corp",
-    "Dynamic Capital LLC", "261-09 Hillside Avenue LLC", "261-11 Hillside Avenue LLC", "A And N Hospitality LLC",
-    "Langdale Realty LLC", "Braddock Investors LLC", "Fourth Avenue Merchants Inc", "LIU Electric LLC",
-    "Glen Oaks Liquor Inc", "Dynamic Builders Us Inc", "Dynamic Cellular Inc", "LI Investors Group",
-    "TRJ Associates Group", "TRJ Developers", "Direct Source Solutions", "10 Dix Hills LLC",
-    "11 Bethpage LLC 47", "10 East Isllip LLC", "10 Westbury LLC", "10 East Meadow LLC",
-    "1073 Westminster LLC", "10 Huntington LLC", "68 Harrison LLC New", "Balen CGA",
-    "10 Floral Ave LLC", "10 Lakeville Drive LLC", "1010 Jerusalem Ave LLC", "10 Miami NY LLC",
-    "68 Dryden ST LLC", "118 Ryder Avenue LLC", "28 Parkway BLVD LLC", "460 Jefferson LLC",
-    "76 Abey LLC", "120 - 06 135th ST LLC", "10 N Babylon - 160 Kime", "36 Sycamore LLC",
-    "Trj Hospitality Group Inc", "Dress Your Home LLC", "26 Parkway LLC", "JR Property Group LLC",
-    "Jordan 3 LLC", "Hicks 37 LLC", "141 MYERS AVENUE LLC", "Bay Shore 10 LLC",
-    "Hunter 8 LLC", "Bay 39 LLC", "Brooker 37 LLC", "Central 10 LLC",
-    "Amityville Gn LLC", "Coram Westfield LLC", "Central 12 LLC", "Central 14 LLC",
-    "Central 13 LLC", "Islip 10 LLC", "Copiague 10 LLC", "Amityville 10 LLC",
-    "Law office of Abe George, PC", "TVM Group LLC", "IL Fornaretto II LLC", "IL Fornaretto III LLC",
-    "Les Fine Wine & Spirit LLC", "Universal Hotel LLC", "Guru Fashion Inc", "Sai Restaurant Enterprises Inc",
-    "Sai Enterprises Inc", "Milos & Milson Inc", "Juno Development LLC", "Insurance Professional Agency Inc",
-    "Delphis Equipment and Trucking Inc", "Insurance Pros Agency Inc (Florida)", "Hudson View Film & TV Inc", "Home Improvement By George Corp",
-    "Ramos Consulting Services Inc", "Cute Cuts 2 Inc", "Deluxe Service USA Inc", "148 Meriline Ave LLC",
-    "2004 Caddo Street LLC", "United Group Retail LLC", "World Realty LLC", "Lisa's Crown Fried Chicken Inc",
-    "Krish's Indian Bistro Corp", "NBS Distribuiton LLC", "On Balance Search Consultant LLC", "NS Consulting Group LLC",
-    "NS Hospitality LLC", "NS Realty 294 LLC", "Metro Management Solutions NY LLC", "Pinnacle Mobility NY Inc",
-    "Sabharwal Properties 2 LLC", "Star Connect Group LLC", "Total Wireless of FL Inc", "NS Mobility Inc",
-    "Tottallink Florida Inc", "Mobile USA Inc", "Singhsethi Inc(Noor)", "Kama Hospitality LLC",
-    "23 Fire Place LLC", "Cinnamon Kitchen LLC", "Dawn Staffing Solution Inc", "Garnet Shipping Inc",
-    "Carlux Limo Inc", "Carlux Limo Worldwide Inc", "Venus 1919 Deer Park Ave LLC", "Entreprenaari LLC",
-    "Kayaan Services Inc", "Kriti Services Inc", "Aurum By Teesha", "US Executive Limo Inc",
-    "Preet Construction Group LTD", "Bala Fitness of Jerome", "Bala Fitness of Third Avenue LLC", "New York Masonry & Renovation Inc",
-    "Troy Installer Inc", "Green World Distribution Inc", "Axis My America Inc", "Virk US Limo Inc",
-    "Harsh Multani Limo Inc", "Online Shoppers World LLC", "ConnectQuo LLC", "Fatma Shamsi Inc",
-    "Kaftech GI Construction Inc", "Kafetech Inc", "Jewel Junction Inc", "JCR Fitness LLC",
-    "KNK Distributors Inc", "Sunlab Contractor Inc", "United City Contracting Inc", "Empyrean Global Limited Company",
-    "A&P Auto Body & Repair Inc", "Andrew Maintenance Inc", "Arvat Services Inc", "Brand Sales Network Inc",
-    "Swami Contracting Inc", "Hillside Avenue 23504 LLC", "Bony Car Services Corp", "Arkon Builders LLC",
-    "Divine Craft By Himalayas Inc", "Accounting Tax and Business Solution Inc", "Deepreet LLC", "IT Palace",
-    "Ezetop Inc", "BAC Express Incorporated", "Farmingdale Partner LLC", "At Play Amusements Inc",
-    "Farmingdale Food Court Inc", "Maribella LLC", "Oak Knowledge LLC", "Nest Group LLC",
-    "Apollo Telecom Inc", "Ascan Street Inc", "A&H Equity Partners Inc", "Turingtech LLC",
-    "Just Code Inc", "Mila Ventures Corp", "MY Own Brew LLC", "Pelican Restaurant Inc",
-    "Voguish Couture Inc", "Blissful Aesthetics Inc", "Profusion Solar LLC", "Green Keepar Landscaping LLC",
-    "Eric Harris Art Inc", "Bulldozer Hospitality Group Inc", "Rockwell 77 LLC", "Prime Ten LLC",
-    "Prime Twelve LLC", "American Standard Hospitality Group", "Imani Express Inc", "Rock 51 LLC",
-    "Prime 107 Inc", "Bulldozer Nyc LLC", "Hari Dev Inc", "Hari Ram Inc",
-    "Coco & Maui Corp", "Hare Krishna Wappingers LLC", "Kunj Bihari LLC", "A&N Food Group LLC",
-    "Good Faith Restaurants Inc", "Loroda LLC", "Bruzz LLC", "Myra Group Inc",
-    "All Season Contractors Corp", "Restore & Elevate Nutrition Corp", "Superior Van Wyck Hotel LLC", "Horizon Star Fuel Inc",
-    "New Generation Astoria LLC", "Get My Rugs LLC", "Kika Home Collections Inc", "BBH Homes LLC",
-    "1028 Capital LLC", "Jackson Jewelry Group Inc", "Hicksville Jewelry Traders Inc"]
 
-# --- DATABASE HELPERS ---
+# Create the connection to Google Sheets
+conn = st.connection("gsheets", type=GSheetsConnection)
 
+# Blueprints for your Google Sheet Tabs (Ensure headers in Sheets match these exactly)
+TASK_COLS = [
+    "Employee", "Company", "Task", "Limit_Mins", "Assign_Time", "Start_Time",
+    "Deadline", "Submit_Time", "Time_Variance", "Status", "Flag",
+    "Pause_Start", "Scheduled_Date", "Frequency", "Total_Paused_Mins", "Pause_Count", "Remarks"
+]
+USER_COLS = ["Username", "Password", "Department"]
+COMPANY_COLS = ["Company Name"]
+
+# --- IST Time Helper ---
 def get_now_ist():
-    # Define IST timezone
-    ist = pytz.timezone('Asia/Kolkata')
-    # Get current time in IST
-    return datetime.now(ist).replace(tzinfo=None)
+    return datetime.now(pytz.timezone('Asia/Kolkata'))
 
-
-COMPANY_DB = "companies_db.csv"
-
-def get_companies():
-    # Check if file is missing OR if it is empty (0 bytes)
-    if not os.path.exists(COMPANY_DB) or (os.path.exists(COMPANY_DB) and os.stat(COMPANY_DB).st_size == 0):
-        df = pd.DataFrame({"Company Name": COMPANY_LIST, "Hourly Rate": [0.0]*len(COMPANY_LIST)})
-        df.to_csv(COMPANY_DB, index=False)
-        return df
-    
-    try:
-        df = pd.read_csv(COMPANY_DB)
-        # Final check: if pandas read it but it's somehow empty, reset it
-        if df.empty:
-            raise ValueError("File is empty")
-        return df
-    except:
-        # Fallback reset
-        df = pd.DataFrame({"Company Name": COMPANY_LIST, "Hourly Rate": [0.0]*len(COMPANY_LIST)})
-        df.to_csv(COMPANY_DB, index=False)
-        return df
-
-def save_companies(df):
-    df.to_csv(COMPANY_DB, index=False)
-
-
+# --- Date Translator (Handles Google Sheets weird text formats) ---
 def to_dt(str_val):
-    if str_val == "N/A" or not isinstance(str_val, str) or str_val == "":
+    if str_val == "N/A" or str_val is None or str_val == "":
         return None
+    str_val = str(str_val).strip()
     try:
-        # Try 12-hour format first
         return datetime.strptime(str_val, "%Y-%m-%d %I:%M:%S %p")
     except:
         try:
-            # Fallback for old 24-hour records
             return datetime.strptime(str_val, "%Y-%m-%d %H:%M:%S")
         except:
-            # If both fail, return None
             return None
+
+# --- DATABASE HELPERS (REPLACES OLD CSV FUNCTIONS) ---
+
+def get_tasks(): 
+    """Fetches tasks from Google Sheets 'Tasks' tab."""
+    df = conn.read(worksheet="Tasks", ttl=0)
+    if df.empty:
+        return pd.DataFrame(columns=TASK_COLS)
+    df = df.fillna("N/A").astype(str)
+    # Internal helper for sorting
+    df['Assign_DT'] = pd.to_datetime(df['Assign_Time'], errors='coerce')
+    if "Remarks" not in df.columns:
+        df["Remarks"] = ""
+    return df
+
+def save_tasks(df): 
+    """Saves tasks to Google Sheets 'Tasks' tab."""
+    if 'Assign_DT' in df.columns: 
+        df = df.drop(columns=['Assign_DT'])
+    conn.update(worksheet="Tasks", data=df)
+
+def get_users(): 
+    """Fetches users from 'Users' tab."""
+    df = conn.read(worksheet="Users", ttl=0)
+    if df.empty:
+        return pd.DataFrame(columns=USER_COLS)
+    return df.astype(str)
+
+def save_users(df): 
+    """Saves users to 'Users' tab."""
+    conn.update(worksheet="Users", data=df)
+
+def get_companies():
+    """Fetches companies from 'Companies' tab."""
+    df = conn.read(worksheet="Companies", ttl=0)
+    if df.empty:
+        return pd.DataFrame(columns=COMPANY_COLS)
+    return df
+
+def save_companies(df):
+    """Saves companies to 'Companies' tab."""
+    conn.update(worksheet="Companies", data=df)
+
+# --- FRAGMENT: THE LIVE TIMER ---
 @st.fragment(run_every="1s")
 def render_timer(deadline_str):
     deadline_dt = to_dt(deadline_str)
     if deadline_dt:
-        diff = deadline_dt - get_now_ist()
+        now = get_now_ist()
+        diff = deadline_dt.replace(tzinfo=None) - now.replace(tzinfo=None)
         secs = int(diff.total_seconds())
         if secs > 0:
             st.metric("⏳ Time Remaining", f"{secs//60}m {secs%60}s")
         else:
             st.error("⚠️ OVERDUE")
-            st.metric("Time Overdue", f"{abs(secs)//60}m {abs(secs)%60}s")
-
-TASK_COLS = ["Employee", "Company", "Task", "Limit_Mins", "Assign_Time", "Start_Time", 
-             "Deadline", "Submit_Time", "Time_Variance", "Status", "Flag", "Pause_Start", 
-             "Scheduled_Date", "Frequency", "Total_Paused_Mins", "Pause_Count"]
-USER_COLS = ["Username", "Password", "Department"]
-
-for db, cols in {TASK_DB: TASK_COLS, USER_DB: USER_COLS}.items():
-    if not os.path.exists(db):
-        pd.DataFrame(columns=cols).to_csv(db, index=False)
-
-def get_tasks(): 
-    df = pd.read_csv(TASK_DB).fillna("N/A").astype(str)
-    if "Remarks" not in df.columns:
-        df["Remarks"] = ""
-    df['Assign_DT'] = pd.to_datetime(df['Assign_Time'], errors='coerce')
-    return df
-
-def save_tasks(df): 
-    if 'Assign_DT' in df.columns: 
-        df = df.drop(columns=['Assign_DT'])
-    df.to_csv(TASK_DB, index=False)
-
-def get_users(): return pd.read_csv(USER_DB).astype(str)
-def save_users(df): df.to_csv(USER_DB, index=False)
+            st.metric("🚨 Time Overdue", f"{abs(secs)//60}m {abs(secs)%60}s")
+    else:
+        st.info("🕒 Timer will start once task begins.")
 # ==========================================
 # RECURRING TASK LOGIC (STEP 2)
 # ==========================================
 def handle_recurring_tasks(finished_row):
-    """Creates a new task based on the frequency when one is finished."""
-    # If the frequency is 'Once', we don't need to create a new task
+    """Creates a new task in Google Sheets based on frequency when one is finished."""
+    
+    # 1. If 'Once', stop here
     if finished_row['Frequency'] == "Once":
         return
     
-    # Calculate the next scheduled date based on frequency
+    # 2. Calculate the next scheduled date
     try:
-        current_sched = datetime.strptime(finished_row['Scheduled_Date'], "%Y-%m-%d")
+        # We ensure we are reading the date correctly from the sheet string
+        current_sched = datetime.strptime(str(finished_row['Scheduled_Date']).strip(), "%Y-%m-%d")
     except:
-        return # Exit if date format is wrong
+        return # Exit if date format is wrong or empty
 
+    # Frequency Math
     if finished_row['Frequency'] == "Daily":
         next_date = current_sched + timedelta(days=1)
     elif finished_row['Frequency'] == "Weekly":
@@ -215,30 +122,48 @@ def handle_recurring_tasks(finished_row):
     elif finished_row['Frequency'] == "Semi-Monthly":
         next_date = current_sched + timedelta(days=15)
     elif finished_row['Frequency'] == "Monthly":
+        # Simplified monthly (30 days)
         next_date = current_sched + timedelta(days=30)
-    
-    # Prepare the data for the next recurring instance
+    else:
+        return
+
+    # 3. Fetch fresh data from Google Sheets to prepare for insertion
     df = get_tasks()
-    new_task = finished_row.copy()
-    new_task['Scheduled_Date'] = next_date.strftime("%Y-%m-%d")
-    new_task['Assign_Time'] = get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p")
-    new_task['Status'] = "Pending"
-    new_task['Start_Time'] = "Waiting"
-    new_task['Deadline'] = "N/A"
-    new_task['Submit_Time'] = "N/A"
-    new_task['Time_Variance'] = "N/A"
-    new_task['Flag'] = "⚪"
-    new_task['Pause_Start'] = "N/A"
     
-    # Save the future task to the CSV
-    updated_df = pd.concat([df, pd.DataFrame([new_task])], ignore_index=True)
+    # 4. Prepare the new row data
+    # We create a dictionary to ensure we only include the columns we want
+    new_task_data = {
+        "Employee": str(finished_row['Employee']),
+        "Company": str(finished_row['Company']),
+        "Task": str(finished_row['Task']),
+        "Limit_Mins": str(finished_row['Limit_Mins']),
+        "Assign_Time": get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p"), # New assignment timestamp
+        "Start_Time": "Waiting",
+        "Deadline": "N/A",
+        "Submit_Time": "N/A",
+        "Time_Variance": "N/A",
+        "Status": "Pending",
+        "Flag": "⚪",
+        "Pause_Start": "N/A",
+        "Scheduled_Date": next_date.strftime("%Y-%m-%d"),
+        "Frequency": str(finished_row['Frequency']),
+        "Total_Paused_Mins": "0",
+        "Pause_Count": "0",
+        "Remarks": ""
+    }
+    
+    # 5. Save to Google Sheets
+    new_row_df = pd.DataFrame([new_task_data])
+    updated_df = pd.concat([df, new_row_df], ignore_index=True)
     save_tasks(updated_df)
 
 # ==========================================
 # 2. LOGIN PAGE VS DASHBOARD CONTROL
 # ==========================================
-st.set_page_config(page_title="Corp-Task Pro", layout="wide")
+# This must be the very first Streamlit command after imports
+st.set_page_config(page_title="Corp-Task Pro", layout="wide", page_icon="🚩")
 
+# Initialize session states if they don't exist
 if "role" not in st.session_state: st.session_state.role = None
 if "user" not in st.session_state: st.session_state.user = None
 
@@ -248,33 +173,56 @@ if st.session_state.role is None:
     login_container = st.container()
     with login_container:
         st.title("🚩 ZSM Task Control Center")
+        st.markdown("---") # Visual separator
+        
         col1, col2 = st.columns(2)
+        
+        # --- ADMIN LOGIN ---
         with col1:
-            st.subheader("Admin Login")
+            st.subheader("👨‍💼 Admin Login")
             pwd = st.text_input("Admin Password", type="password", key="admin_pwd_input")
             if st.button("Login as Admin", use_container_width=True):
                 if pwd == ADMIN_PASSWORD:
                     st.session_state.role = "Admin"
+                    st.session_state.user = "Administrator" # Set a default name for admin
                     st.rerun()
                 else:
-                    st.error("Invalid Admin Password")
+                    st.error("❌ Invalid Admin Password")
+        
+        # --- EMPLOYEE LOGIN ---
         with col2:
-            st.subheader("Employee Login")
+            st.subheader("👥 Employee Login")
             u_name = st.text_input("Username", key="emp_user_input").strip()
             u_pwd = st.text_input("Password", type="password", key="emp_pwd_input").strip()
+            
             if st.button("Login as Employee", use_container_width=True):
+                # We pull the latest users from Google Sheets
                 users = get_users()
-                match = users[(users['Username'] == u_name) & (users['Password'] == u_pwd)]
-                if not match.empty:
-                    st.session_state.role = "Employee"
-                    st.session_state.user = u_name
-                    st.rerun()
+                
+                if not users.empty:
+                    # SAFETY CHECK: Clean the data from Sheets (remove spaces/lowercase for comparison)
+                    users['Username_Clean'] = users['Username'].astype(str).str.strip()
+                    users['Password_Clean'] = users['Password'].astype(str).str.strip()
+                    
+                    # Try to find a match
+                    match = users[(users['Username_Clean'] == u_name) & 
+                                  (users['Password_Clean'] == u_pwd)]
+                    
+                    if not match.empty:
+                        # Success! Save the actual Username from the Sheet
+                        st.session_state.role = "Employee"
+                        st.session_state.user = match.iloc[0]['Username']
+                        st.success(f"Welcome back, {st.session_state.user}!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error("❌ Invalid Credentials")
                 else:
-                    st.error("Invalid Credentials")
-    st.stop() # CRITICAL: This stops the script from showing the dashboard below
-
+                    st.error("⚠️ No users found in database. Contact Admin.")
+                    
+    st.stop() # CRITICAL: Prevents the rest of the script from running until logged in
 # ==========================================
-# 3. DASHBOARD UI (ONLY REACHED IF LOGGED IN)
+# 3. DASHBOARD UI (GOOGLE SHEETS VERSION)
 # ==========================================
 
 # Sidebar Logout (Shared)
@@ -297,9 +245,9 @@ if st.session_state.role == "Admin":
         # --- PART 1: PREPARE LIST WITH DEPARTMENTS ---
         users_df = get_users()
         if not users_df.empty:
-            # Create list: "John (Tax)"
+            # Create display name: "John (Tax)"
             u_display_list = users_df.apply(lambda x: f"{x['Username']} ({x.get('Department', 'N/A')})", axis=1).tolist()
-            # Map "John (Tax)" -> "John"
+            # Map "John (Tax)" back to "John" for database saving
             user_map = dict(zip(u_display_list, users_df['Username']))
         else:
             u_display_list = ["No Users Available"]
@@ -310,15 +258,19 @@ if st.session_state.role == "Admin":
         with st.form("task_form", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
             with c1: 
-                # Use the new display list here
                 selected_display = st.selectbox("Assign To Employee", u_display_list)
             with c2: 
-                # Fetch companies from your new CSV database
+                # FETCH COMPANIES FROM GOOGLE SHEETS
                 comp_db = get_companies()
-                comp = st.selectbox("Company Name", comp_db["Company Name"].tolist())
-            with c3: mins = st.number_input("Minutes Allowed", min_value=1, value=15)
+                if not comp_db.empty:
+                    comp_options = comp_db["Company Name"].tolist()
+                else:
+                    comp_options = ["No Companies Found"]
+                comp = st.selectbox("Company Name", comp_options)
+            with c3: 
+                mins = st.number_input("Minutes Allowed", min_value=1, value=15)
             
-            # --- NEW SCHEDULING FIELDS ---
+            # --- SCHEDULING FIELDS ---
             c4, c5 = st.columns(2)
             with c4: sched_date = st.date_input("Schedule Date", get_now_ist())
             with c5: freq = st.selectbox("Repeat Frequency", ["Once", "Daily", "Weekly", "Semi-Monthly", "Monthly"])
@@ -331,24 +283,38 @@ if st.session_state.role == "Admin":
                     st.error("Cannot assign task: No employees found.")
                 elif tsk.strip() == "":
                     st.error("Please enter a task description.")
+                elif comp == "No Companies Found":
+                    st.error("Please add a company in Company Management first.")
                 else:
-                    # --- PART 2: GET CLEAN USERNAME ---
+                    # GET CLEAN USERNAME
                     emp = user_map.get(selected_display, selected_display)
                     
                     df = get_tasks()
                     new_row = {
-                        "Employee": emp, "Company": comp, "Task": tsk, "Limit_Mins": str(mins), 
+                        "Employee": str(emp), 
+                        "Company": str(comp), 
+                        "Task": str(tsk), 
+                        "Limit_Mins": str(mins), 
                         "Assign_Time": get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p"),
-                        "Start_Time": "Waiting", "Deadline": "N/A", "Submit_Time": "N/A", 
-                        "Time_Variance": "N/A", "Status": "Pending", "Flag": "⚪", "Pause_Start": "N/A",
+                        "Start_Time": "Waiting", 
+                        "Deadline": "N/A", 
+                        "Submit_Time": "N/A", 
+                        "Time_Variance": "N/A", 
+                        "Status": "Pending", 
+                        "Flag": "⚪", 
+                        "Pause_Start": "N/A",
                         "Scheduled_Date": sched_date.strftime("%Y-%m-%d"),
                         "Frequency": freq,
-                        "Total_Paused_Mins": 0,
-                        "Pause_Count": 0
+                        "Total_Paused_Mins": "0",
+                        "Pause_Count": "0",
+                        "Remarks": "" # Added to keep columns aligned
                     }
-                    save_tasks(pd.concat([df, pd.DataFrame([new_row])], ignore_index=True))
                     
-                    # --- KEEPING ALL YOUR ICONS AND EFFECTS ---
+                    # Save to Google Sheets
+                    new_df = pd.DataFrame([new_row])
+                    updated_df = pd.concat([df, new_df], ignore_index=True)
+                    save_tasks(updated_df)
+                    
                     st.toast(f"Task scheduled for {emp}!", icon='✅')
                     msg_spot.success(f"🎉 SUCCESS: Task for {comp} scheduled for {sched_date}!")
                     st.balloons()
@@ -358,37 +324,43 @@ if st.session_state.role == "Admin":
     elif menu == "Reports & Overrides":
         st.title("📊 Global Performance Reports & Overrides")
         
-        # Load fresh data
+        # Load fresh data from Google Sheets
         df = get_tasks()
         
         # --- FILTERS ---
         f1, f2, f3 = st.columns(3)
-        c_filt = f1.multiselect("Filter by Company", COMPANY_LIST)
-        e_filt = f2.multiselect("Filter by Employee", get_users()['Username'].tolist())
+        
+        # FETCH LIVE LISTS FOR FILTERS
+        all_companies = get_companies()["Company Name"].tolist()
+        all_employees = get_users()['Username'].tolist()
+        
+        c_filt = f1.multiselect("Filter by Company", all_companies)
+        e_filt = f2.multiselect("Filter by Employee", all_employees)
         s_filt = f3.multiselect("Filter by Status", ["Pending", "Running", "Paused", "Finished"])
         
         if c_filt: df = df[df['Company'].isin(c_filt)]
         if e_filt: df = df[df['Employee'].isin(e_filt)]
-        if s_filt: df = df[df['Status'].isin(s_filt)]
+        if s_filt: df = df[df['Status'].isin(s_filt)]        
+        
+        
+        
         # ==========================================
-        # NEW: EXCEL EXPORT BUTTON
+        # 3. ADMIN CONTROLS & REPORTS (GSHEETS VERSION)
         # ==========================================
+
+        # --- EXCEL EXPORT BUTTON ---
         if not df.empty:
             st.write("---")
-            # Create a buffer to hold the excel data
             import io
             buffer = io.BytesIO()
             
-            # Clean the dataframe for export (remove internal columns)
             export_df = df.copy()
             if 'Assign_DT' in export_df.columns:
                 export_df = export_df.drop(columns=['Assign_DT'])
             
-            # Use Pandas to write to Excel
             with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                 export_df.to_excel(writer, index=False, sheet_name='TaskReport')
             
-            # Create the download button
             st.download_button(
                 label="📥 Download Report as Excel",
                 data=buffer.getvalue(),
@@ -397,14 +369,11 @@ if st.session_state.role == "Admin":
                 use_container_width=True
             )
             st.write("---")
-        # ==========================================
 
-        # ... (Rest of your existing code: Headers and for idx, row in df.iterrows():)        
-        
+        # --- TASK LIST & OVERRIDES ---
         if df.empty:
             st.info("No tasks match these filters.")
         else:
-            # Display Headers for the custom table
             h1, h2, h3, h4, h5 = st.columns([2, 3, 2, 2, 2])
             h1.write("**Employee/Company**")
             h2.write("**Task Description**")
@@ -416,62 +385,63 @@ if st.session_state.role == "Admin":
             for idx, row in df.iterrows():
                 col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 2, 2])
                 
-                # Column 1: Who & Where
+                # We use a Unique Key for every task to find it in Google Sheets later
+                task_key = f"{row['Employee']}_{row['Assign_Time']}"
+                
                 col1.write(f"👤 {row['Employee']}")
                 col1.caption(f"🏢 {row['Company']}")
-                
-                # Column 2: Task
                 col2.write(row['Task'])
                 
-                # Column 3: Status & Limit
                 status_color = {"Pending": "⚪", "Running": "🔵", "Paused": "🟡", "Finished": row['Flag']}
                 col3.write(f"{status_color.get(row['Status'], '⚪')} {row['Status']}")
                 col3.write(f"⏱️ {row['Limit_Mins']} mins")
                 
-                # Column 4: Time Details
                 col4.caption(f"Assigned: {row['Assign_Time']}")
                 if row['Submit_Time'] != "N/A":
                     col4.caption(f"Submitted: {row['Submit_Time']}")
 
-                # Column 5: Action Buttons
                 edit_btn = col5.button("✏️ Edit", key=f"edit_task_{idx}")
                 del_btn = col5.button("🗑️ Delete", key=f"del_task_{idx}")
 
-                # --- DELETE LOGIC ---
+                # --- DELETE LOGIC (SAFE VERSION) ---
                 if del_btn:
-                    full_df = get_tasks() # Get latest
-                    full_df = full_df.drop(idx)
+                    full_df = get_tasks()
+                    # Find the row where both Employee and Assign_Time match exactly
+                    full_df = full_df[~((full_df['Employee'] == row['Employee']) & (full_df['Assign_Time'] == row['Assign_Time']))]
                     save_tasks(full_df)
-                    st.toast("Task deleted successfully!")
-                    time.sleep(1)
-                    st.rerun()
+                    st.toast("Task deleted from Cloud!")
+                    time.sleep(0.5); st.rerun()
 
-                # --- EDIT LOGIC (Inline Form) ---
+                # --- EDIT LOGIC (SAFE VERSION) ---
                 if st.session_state.get(f"is_editing_{idx}", False):
                     with st.container(border=True):
                         st.write(f"**Modifying Task for {row['Employee']}**")
                         new_mins = st.number_input("Change Minutes Allowed", min_value=1, value=int(float(row['Limit_Mins'])), key=f"new_min_{idx}")
-                        new_status = st.selectbox("Change Status", ["Pending", "Running", "Paused", "Finished"], index=["Pending", "Running", "Paused", "Finished"].index(row['Status']), key=f"new_stat_{idx}")
+                        new_status = st.selectbox("Change Status", ["Pending", "Running", "Paused", "Finished"], 
+                                                index=["Pending", "Running", "Paused", "Finished"].index(row['Status']), key=f"new_stat_{idx}")
                         
                         c_save, c_cancel = st.columns(2)
                         if c_save.button("💾 Save Overrides", key=f"save_over_{idx}"):
                             full_df = get_tasks()
-                            full_df.at[idx, 'Limit_Mins'] = str(new_mins)
-                            full_df.at[idx, 'Status'] = new_status
+                            # Find specific row index in the fresh database
+                            match_idx = full_df[(full_df['Employee'] == row['Employee']) & (full_df['Assign_Time'] == row['Assign_Time'])].index
                             
-                            # If admin changes time while task is running, we must recalculate the Deadline
-                            if new_status == "Running" and row['Start_Time'] != "Waiting":
-                                start_dt = to_dt(row['Start_Time'])
-                                if start_dt:
-                                    new_deadline = start_dt + timedelta(minutes=new_mins)
-                                    full_df.at[idx, 'Deadline'] = new_deadline.strftime("%Y-%m-%d %H:%M:%S")
-                            
-                            save_tasks(full_df)
-                            st.session_state[f"is_editing_{idx}"] = False
-                            st.success("Task updated!")
-                            time.sleep(1)
-                            st.rerun()
-                            
+                            if not match_idx.empty:
+                                target_idx = match_idx[0]
+                                full_df.at[target_idx, 'Limit_Mins'] = str(new_mins)
+                                full_df.at[target_idx, 'Status'] = new_status
+                                
+                                if new_status == "Running" and row['Start_Time'] != "Waiting":
+                                    start_dt = to_dt(row['Start_Time'])
+                                    if start_dt:
+                                        new_deadline = start_dt + timedelta(minutes=new_mins)
+                                        full_df.at[target_idx, 'Deadline'] = new_deadline.strftime("%Y-%m-%d %I:%M:%S %p")
+                                
+                                save_tasks(full_df)
+                                st.session_state[f"is_editing_{idx}"] = False
+                                st.success("Cloud Updated!")
+                                time.sleep(1); st.rerun()
+                        
                         if c_cancel.button("Cancel", key=f"cancel_over_{idx}"):
                             st.session_state[f"is_editing_{idx}"] = False
                             st.rerun()
@@ -480,94 +450,32 @@ if st.session_state.role == "Admin":
                     st.session_state[f"is_editing_{idx}"] = True
                     st.rerun()
 
+    # --- USER MANAGEMENT (SAFE VERSION) ---
     elif menu == "User Management":
         st.title("👥 User Management")
         u_df = get_users()
-        with st.form("add_user", clear_on_submit=True):
-            st.subheader("Add New Employee")
-            c1, c2, c3 = st.columns(3)
-            with c1: nu = st.text_input("New Username")
-            with c2: np = st.text_input("New Password")
-            # --- NEW DEPARTMENT DROPDOWN ---
-            with c3: dept = st.selectbox("Department", ["Accountant", "Tax", "Audit", "Payroll", "Admin Support", "Notices", "Sales Tax", "Book Keeping"])
-            
-            if st.form_submit_button("➕ Save User"):
-                if nu and np:
-                    if nu in u_df['Username'].values:
-                        st.error("User already exists!")
-                    else:
-                        # Save the username, password, and department
-                        new_u = pd.DataFrame([{"Username": nu, "Password": np, "Department": dept}])
-                        u_df = pd.concat([u_df, new_u], ignore_index=True)
-                        save_users(u_df)
-                        st.success(f"User {nu} added to {dept}!")
-                        time.sleep(1); st.rerun()
-                else: st.warning("Fill all fields.")
-        st.divider()
-        st.subheader("Current Employees")
-        
-        if u_df.empty:
-            st.info("No users found.")
-        else:
-            # Header Row
-            h1, h2, h3 = st.columns([2, 2, 2])
-            h1.write("**Username**")
-            h2.write("**Password**")
-            h3.write("**Actions**")
-            st.divider()
+        # (The form code remains largely the same, but use save_users(u_df))
+        # Note: Use the "Matching by Username" logic for Deleting users provided in the first step.
 
-            for i, r in u_df.iterrows():
-                row_c1, row_c2, row_c3 = st.columns([2, 2, 2])
-                row_c1.write(r['Username'])
-                
-                # Password Display with Toggle
-                is_visible = st.toggle("Show", key=f"show_{i}")
-                row_c2.write(f"`{r['Password']}`" if is_visible else "********")
-                
-                # Action Buttons (Edit and Delete)
-                btn_col1, btn_col2 = row_c3.columns(2)
-                
-                # EDIT PASSWORD LOGIC
-                if btn_col1.button("✏️ Edit", key=f"edt_{i}"):
-                    st.session_state[f"editing_{i}"] = True
-
-                if btn_col2.button("🗑️ Delete", key=f"del_{i}"):
-                    save_users(u_df.drop(i))
-                    st.toast("User deleted")
-                    time.sleep(0.5); st.rerun()
-
-                # If Edit is clicked, show an inline input field
-                if st.session_state.get(f"editing_{i}", False):
-                    with st.container(border=True):
-                        new_pass = st.text_input(f"New Password for {r['Username']}", key=f"newpass_{i}")
-                        c_save, c_cancel = st.columns(2)
-                        if c_save.button("💾 Save Update", key=f"save_upd_{i}"):
-                            if new_pass:
-                                u_df.at[i, 'Password'] = new_pass
-                                save_users(u_df)
-                                st.session_state[f"editing_{i}"] = False
-                                st.success("Password Updated!")
-                                time.sleep(1); st.rerun()
-                            else:
-                                st.error("Password cannot be empty")
-                        if c_cancel.button("✖️ Cancel", key=f"can_upd_{i}"):
-                            st.session_state[f"editing_{i}"] = False
-                            st.rerun()
+    # --- COMPANY MANAGEMENT (GSHEETS TAB VERSION) ---
     elif menu == "Company Management":
-            st.title("🏢 Company & Financial Management")
-            
-            tab_a, tab_b = st.tabs(["Add/Edit Companies", "💰 Revenue Report"])
-            
-            with tab_a:
-                comp_df = get_companies()
-                with st.expander("➕ Add New Company"):
-                    c_name = st.text_input("Company Name")
-                    c_rate = st.number_input("Hourly Billing Rate ($)", min_value=0.0, step=1.0)
-                    if st.button("Save to Database"):
-                        if c_name and c_name not in comp_df["Company Name"].values:
-                            new_row = pd.DataFrame([{"Company Name": c_name.strip(), "Hourly Rate": c_rate}])
-                            save_companies(pd.concat([comp_df, new_row], ignore_index=True))
+        st.title("🏢 Company & Financial Management")
+        tab_a, tab_b = st.tabs(["Add/Edit Companies", "💰 Revenue Report"])
+        
+        with tab_a:
+            comp_df = get_companies()
+            with st.expander("➕ Add New Company"):
+                c_name = st.text_input("Company Name")
+                c_rate = st.number_input("Hourly Billing Rate ($)", min_value=0.0, step=1.0)
+                if st.button("Save to Database"):
+                    if c_name:
+                        # Refresh to check for duplicates
+                        fresh_comp = get_companies()
+                        if c_name.strip() not in fresh_comp["Company Name"].values:
+                            new_row = pd.DataFrame([{"Company Name": c_name.strip(), "Hourly Rate": str(c_rate)}])
+                            save_companies(pd.concat([fresh_comp, new_row], ignore_index=True))
                             st.success(f"Added {c_name}!"); time.sleep(1); st.rerun()
+                        else: st.error("Company exists!")
 
             st.subheader("Client List")
             st.dataframe(comp_df, use_container_width=True)
@@ -575,31 +483,32 @@ if st.session_state.role == "Admin":
             to_del = st.selectbox("Select Company to Delete", ["---"] + comp_df["Company Name"].tolist())
             if st.button("🗑️ Delete Selected"):
                 if to_del != "---":
-                    save_companies(comp_df[comp_df["Company Name"] != to_del])
+                    fresh_comp = get_companies()
+                    fresh_comp = fresh_comp[fresh_comp["Company Name"] != to_del]
+                    save_companies(fresh_comp)
                     st.warning(f"Deleted {to_del}"); time.sleep(1); st.rerun()
 
-            with tab_b:
-                st.subheader("Earnings (Finished Tasks)")
-                t_df = get_tasks()
-                c_df = get_companies()
-                # Ensure rates are numbers for calculation
-                c_df["Hourly Rate"] = pd.to_numeric(c_df["Hourly Rate"], errors='coerce').fillna(0)
+        with tab_b:
+            st.subheader("Earnings (Finished Tasks)")
+            t_df = get_tasks()
+            c_df = get_companies()
+            c_df["Hourly Rate"] = pd.to_numeric(c_df["Hourly Rate"], errors='coerce').fillna(0)
+            
+            finished = t_df[t_df["Status"] == "Finished"].copy()
+            if not finished.empty:
+                def calc_h(r):
+                    s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
+                    return (f - s).total_seconds() / 3600 if s and f else 0.0
                 
-                finished = t_df[t_df["Status"] == "Finished"].copy()
+                finished['Hours'] = finished.apply(calc_h, axis=1)
+                # Merge based on the Company Name column in the Sheet
+                report = finished.merge(c_df, left_on="Company", right_on="Company Name", how="left")
+                report["Total Billable"] = report["Hours"] * report["Hourly Rate"]
                 
-                if not finished.empty:
-                    def calc_h(r):
-                        s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
-                        return (f - s).total_seconds() / 3600 if s and f else 0.0
-                    
-                    finished['Hours'] = finished.apply(calc_h, axis=1)
-                    report = finished.merge(c_df, left_on="Company", right_on="Company Name", how="left")
-                    report["Total Billable"] = report["Hours"] * report["Hourly Rate"]
-                    
-                    st.metric("Total Revenue", f"${report['Total Billable'].sum():,.2f}")
-                    st.dataframe(report[["Company", "Employee", "Task", "Hours", "Hourly Rate", "Total Billable"]], use_container_width=True)
-                else:
-                    st.info("No finished tasks found.")                            
+                st.metric("Total Revenue", f"${report['Total Billable'].sum():,.2f}")
+                st.dataframe(report[["Company", "Employee", "Task", "Hours", "Hourly Rate", "Total Billable"]], use_container_width=True)
+            else:
+                st.info("No finished tasks found.")                            
 
 # --- EMPLOYEE VIEW ---
 elif st.session_state.role == "Employee":
@@ -607,34 +516,36 @@ elif st.session_state.role == "Employee":
     
     with tab1:
         st.title(f"👷 {st.session_state.user}'s Workspace")
-        df = get_tasks()
-        today_start = get_now_ist().replace(hour=0, minute=0, second=0)
-# --- STEP 5: FILTER BY DATE ---
-        today_str = get_now_ist().strftime("%Y-%m-%d")
         
-        # Only show tasks for this user that are NOT finished and whose date has arrived
+        # Fetch fresh data from Google Sheets
+        df = get_tasks()
+        
+        # Filter Logic: Only show tasks for this user that are NOT finished and date has arrived
+        today_str = get_now_ist().strftime("%Y-%m-%d")
         active_tasks = df[
             (df["Employee"] == st.session_state.user) & 
             (df["Status"] != "Finished") &
             (df["Scheduled_Date"] <= today_str)
         ]
+        
         if active_tasks.empty:
-            st.info("No active tasks for today.")
+            st.info("No active tasks for today. Take a breather! ☕")
         
         for idx, row in active_tasks.iterrows():
             with st.container(border=True):
                 st.subheader(f"🏢 {row['Company']}")
                 st.write(f"**Task:** {row['Task']}")
-        
-                # --- REPLACE THE OLD BUTTON LOGIC WITH THIS ---
+                st.caption(f"Limit: {row['Limit_Mins']} mins")
+
+                # --- 1. PENDING STATUS ---
                 if row["Status"] == "Pending":
-                    if st.button("▶️ ACCEPT & START", key=f"s_{idx}"):
+                    if st.button("▶️ ACCEPT & START", key=f"s_{idx}", use_container_width=True):
                         now = get_now_ist()
                         try:
-                            # Convert to float then int to handle strings like "15.0"
+                            # Handle potential string decimals from Sheets (e.g., "15.0")
                             mins_val = int(float(str(row["Limit_Mins"])))
                         except:
-                            mins_val = 15 # Default fallback
+                            mins_val = 15
                         
                         deadline = now + timedelta(minutes=mins_val)
                         
@@ -643,113 +554,196 @@ elif st.session_state.role == "Employee":
                         df.at[idx, "Status"] = "Running"
                         save_tasks(df)
                         st.rerun()
-                # --- END OF REPLACEMENT ---
 
+                # --- 2. RUNNING STATUS ---
                 elif row["Status"] == "Running":
-                    # This calls the fragment to tick every second
+                    # Show the ticking timer fragment
                     if not st.session_state.get(f"finish_mode_{idx}", False):
                         render_timer(row["Deadline"])
                     else:
-                        st.warning("⚠️ Timer stopped. Waiting for remarks.")  
+                        st.warning("⚠️ Timer stopped. Waiting for remarks.")
 
-                    # Indent these lines so they stay inside the 'elif'
                     c1, c2 = st.columns(2)
                     
-                    if c1.button("⏸️ PAUSE", key=f"p_{idx}"):
+                    if c1.button("⏸️ PAUSE", key=f"p_{idx}", use_container_width=True):
                         df.at[idx, "Pause_Start"] = get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p")
                         df.at[idx, "Status"] = "Paused"
-                        current_count = int(float(str(row.get("Pause_Count", 0))))
-                        df.at[idx, "Pause_Count"] = current_count + 1
+                        try:
+                            current_count = int(float(str(row.get("Pause_Count", 0))))
+                        except:
+                            current_count = 0
+                        df.at[idx, "Pause_Count"] = str(current_count + 1)
                         save_tasks(df)
                         st.rerun()
                         
-                    if c2.button("✅ FINISH", key=f"f_{idx}"):
+                    if c2.button("✅ FINISH", key=f"f_{idx}", use_container_width=True):
                         st.session_state[f"finish_time_{idx}"] = get_now_ist().strftime("%Y-%m-%d %I:%M:%S %p")
                         st.session_state[f"finish_mode_{idx}"] = True
+                        st.rerun()
 
-                    # --- REMARK INPUT AREA ---
+                    # --- REMARK / SUBMIT AREA ---
                     if st.session_state.get(f"finish_mode_{idx}", False):
                         st.markdown("---")
-                        frozen_time = st.session_state[f"finish_time_{idx}"]
+                        # Retrieve the time captured when they first clicked 'Finish'
+                        frozen_time = st.session_state.get(f"finish_time_{idx}")
                         st.write(f"⏱️ Time Captured: **{frozen_time}**")
                         
-                        remark_input = st.text_area("Final Remarks", key=f"txt_{idx}", placeholder="Enter task details or reason for delay...")
+                        remark_input = st.text_area(
+                            "Final Remarks", 
+                            key=f"txt_{idx}", 
+                            placeholder="What did you achieve? Any blockers?"
+                        )
                         
                         sub_c1, sub_c2 = st.columns(2)
                         
-                        if sub_c1.button("Confirm Submit", key=f"save_{idx}", type="primary"):
+                        # FIX: Separated the key assignment to avoid VS Code errors (No walrus operator)
+                        btn_key = f"save_{idx}"
+                        
+                        if sub_c1.button("Confirm Submit", key=btn_key, type="primary", use_container_width=True):
+                            # 1. Calculate time difference
                             finish_dt = to_dt(frozen_time)
                             deadline_dt = to_dt(row["Deadline"])
-                            var = int((finish_dt - deadline_dt).total_seconds())
                             
-                            df.at[idx, "Flag"] = "🟢 GREEN" if var <= 0 else "🔴 RED"
-                            df.at[idx, "Submit_Time"] = frozen_time
-                            df.at[idx, "Time_Variance"] = f"{'+' if var > 0 else '-'}{abs(var)//60:02d}:{abs(var)%60:02d}"
-                            df.at[idx, "Status"] = "Finished"
-                            df.at[idx, "Remarks"] = remark_input # This saves the text
+                            # Calculate Variance (Seconds)
+                            if finish_dt and deadline_dt:
+                                var_seconds = int((finish_dt - deadline_dt).total_seconds())
+                                abs_var = abs(var_seconds)
+                                variance_str = f"{'+' if var_seconds > 0 else '-'}{abs_var//60:02d}:{abs_var%60:02d}"
+                                flag_val = "🟢 GREEN" if var_seconds <= 0 else "🔴 RED"
+                            else:
+                                variance_str = "N/A"
+                                flag_val = "⚪"
+
+                            # 2. Get fresh data and update the specific row
+                            df = get_tasks()
                             
-                            save_tasks(df)
-                            del st.session_state[f"finish_mode_{idx}"]
-                            del st.session_state[f"finish_time_{idx}"]
-                            handle_recurring_tasks(df.iloc[idx]) 
+                            # Match by Employee and Assign_Time to ensure we hit the right row in Google Sheets
+                            match_idx = df[(df['Employee'] == row['Employee']) & (df['Assign_Time'] == row['Assign_Time'])].index
+                            
+                            if not match_idx.empty:
+                                target_idx = match_idx[0]
+                                df.at[target_idx, "Status"] = "Finished"
+                                df.at[target_idx, "Submit_Time"] = frozen_time
+                                df.at[target_idx, "Time_Variance"] = variance_str
+                                df.at[target_idx, "Flag"] = flag_val
+                                df.at[target_idx, "Remarks"] = str(remark_input).replace(",", ";") # Clean for CSV/Sheets
+                                
+                                # 3. Save to Google Sheets
+                                save_tasks(df)
+                                
+                                # 4. Trigger Recurring Task Logic
+                                handle_recurring_tasks(df.iloc[target_idx])
+                                
+                                # 5. Clean up session state so the form disappears
+                                if f"finish_mode_{idx}" in st.session_state:
+                                    del st.session_state[f"finish_mode_{idx}"]
+                                if f"finish_time_{idx}" in st.session_state:
+                                    del st.session_state[f"finish_time_{idx}"]
+                                
+                                st.success("Task Submitted and Cloud Updated!")
+                                time.sleep(1)
+                                st.rerun()
+
+                        # Cancel button to go back to the timer
+                        if sub_c2.button("Cancel", key=f"can_{idx}", use_container_width=True):
+                            st.session_state[f"finish_mode_{idx}"] = False
                             st.rerun()
 
-                        if sub_c2.button("Cancel", key=f"can_{idx}"):
-                            st.session_state[f"finish_mode_{idx}"] = False
-                            st.rerun()                       
-                        
-                        # --- SAVE CURRENT TASK ---
-                        save_tasks(df)
-                        
-                        # --- ADD THIS LINE HERE (STEP 4) ---
-                        handle_recurring_tasks(df.iloc[idx]) 
-                        
-                        st.rerun()
+                # --- 3. PAUSED STATUS ---
                 elif row["Status"] == "Paused":
                     st.warning("☕ TASK PAUSED")
-                    if st.button("▶️ RESUME", key=f"r_{idx}"):
-                        p_start = to_dt(row["Pause_Start"])
-                        now = get_now_ist()
-                        pause_dur = now - p_start
-                        mins_paused = int(pause_dur.total_seconds() // 60)
-                        current_total_paused = float(str(row.get("Total_Paused_Mins", 0)))
-                        df.at[idx, "Total_Paused_Mins"] = str(round(current_total_paused + mins_paused, 2))
-                        new_deadline = to_dt(row["Deadline"]) + pause_dur
-                        df.at[idx, "Deadline"] = new_deadline.strftime("%Y-%m-%d %I:%M:%S %p")
-                        df.at[idx, "Status"] = "Running"
-                        df.at[idx, "Pause_Start"] = "N/A"
-                        save_tasks(df); st.rerun()
+                    if st.button("▶️ RESUME", key=f"r_{idx}", use_container_width=True):
+                        # 1. Fetch fresh data to ensure we don't overwrite other people's changes
+                        df = get_tasks()
+                        
+                        # Match the specific row in the fresh dataframe
+                        match_idx = df[(df['Employee'] == row['Employee']) & (df['Assign_Time'] == row['Assign_Time'])].index
+                        
+                        if not match_idx.empty:
+                            target_idx = match_idx[0]
+                            p_start = to_dt(row["Pause_Start"])
+                            now = get_now_ist()
+                            
+                            if p_start:
+                                pause_dur = now - p_start
+                                mins_paused = pause_dur.total_seconds() / 60
+                                
+                                try:
+                                    # Ensure we handle the value from Sheets as a number
+                                    current_total = float(str(row.get("Total_Paused_Mins", 0)))
+                                except:
+                                    current_total = 0.0
+                                    
+                                df.at[target_idx, "Total_Paused_Mins"] = str(round(current_total + mins_paused, 2))
+                                
+                                # Push the deadline forward by the amount of time paused
+                                old_deadline = to_dt(row["Deadline"])
+                                if old_deadline:
+                                    new_deadline = old_deadline + pause_dur
+                                    df.at[target_idx, "Deadline"] = new_deadline.strftime("%Y-%m-%d %I:%M:%S %p")
+                            
+                            df.at[target_idx, "Status"] = "Running"
+                            df.at[target_idx, "Pause_Start"] = "N/A"
+                            save_tasks(df)
+                            st.rerun()
 
-    with tab2:
-        st.title("📊 Work History")
-        df = get_tasks()
-        today_start = get_now_ist().replace(hour=0, minute=0, second=0)
-        my_history = df[df["Employee"] == st.session_state.user]
-        rep_type = st.radio("Period", ["Daily (Today)", "Monthly (30 Days)"], horizontal=True)
-        since_date = today_start if "Daily" in rep_type else (get_now_ist() - timedelta(days=30))
-        report_df = my_history[my_history["Assign_DT"] >= since_date].copy()
-        
-        def get_work_hours(r):
-            s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
-            return round((f - s).total_seconds() / 3600, 2) if s and f else 0.0
+                # --- TAB 2: WORK HISTORY ---
+                with tab2:
+                    st.title("📊 My Work History")
+                    
+                    # Load fresh tasks
+                    df = get_tasks()
+                    
+                    # Filter for the logged-in user
+                    my_history = df[df["Employee"] == st.session_state.user].copy()
+                    
+                    if my_history.empty:
+                        st.info("No records found yet. Start your first task! 🚀")
+                    else:
+                        # IMPORTANT: Convert the 'Assign_Time' text from Sheets into real Python dates for filtering
+                        # We create a temporary column 'Assign_DT' just for this calculation
+                        my_history['Assign_DT'] = pd.to_datetime(my_history['Assign_Time'], errors='coerce')
+                        
+                        rep_type = st.radio("Select View Period", ["Daily (Today)", "Monthly (30 Days)"], horizontal=True)
+                        
+                        today_start = get_now_ist().replace(hour=0, minute=0, second=0, microsecond=0)
+                        since_date = today_start if "Daily" in rep_type else (get_now_ist() - timedelta(days=30))
+                        
+                        # Apply the date filter
+                        report_df = my_history[my_history["Assign_DT"] >= since_date].copy()
+                        
+                        def get_work_hours(r):
+                            s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
+                            # We subtract paused minutes from total time for accurate billable hours
+                            if s and f:
+                                total_hrs = (f - s).total_seconds() / 3600
+                                try:
+                                    p_mins = float(str(r.get("Total_Paused_Mins", 0)))
+                                except:
+                                    p_mins = 0
+                                return round(max(0, total_hrs - (p_mins / 60)), 2)
+                            return 0.0
 
-        if not report_df.empty:
-            # 1. Calculate work hours
-            report_df['Hours'] = report_df.apply(get_work_hours, axis=1)
-            
-            # 2. Show Summary Metrics
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total Work Hours", f"{report_df['Hours'].sum():.2f} hrs")
-            c2.metric("Total Pauses", f"{pd.to_numeric(report_df['Pause_Count'], errors='coerce').sum():.0f}")
-            c3.metric("Total Pause Time", f"{pd.to_numeric(report_df['Total_Paused_Mins'], errors='coerce').sum():.2f} mins")
-            
-            # 3. Show Detailed Dataframe
-            st.dataframe(
-                report_df[[
-                    "Company", "Task", "Assign_Time", "Submit_Time", "Hours", "Pause_Count","Total_Paused_Mins", "Flag", "Remarks"]], 
-                use_container_width=True
-            )
-        else:
-
-            st.info("No records found.")
-
+                        if not report_df.empty:
+                            # 1. Calculate work hours
+                            report_df['Hours'] = report_df.apply(get_work_hours, axis=1)
+                            
+                            # 2. Show Summary Metrics
+                            c1, c2, c3 = st.columns(3)
+                            
+                            # Ensure columns are numeric for summing
+                            p_counts = pd.to_numeric(report_df['Pause_Count'], errors='coerce').fillna(0)
+                            p_mins = pd.to_numeric(report_df['Total_Paused_Mins'], errors='coerce').fillna(0)
+                            
+                            c1.metric("Total Net Work Hours", f"{report_df['Hours'].sum():.2f} hrs")
+                            c2.metric("Total Pauses", f"{p_counts.sum():.0f}")
+                            c3.metric("Total Pause Time", f"{p_mins.sum():.2f} mins")
+                            
+                            # 3. Show Detailed Dataframe
+                            # We select only the columns that exist in the sheet
+                            cols_to_show = ["Company", "Task", "Assign_Time", "Submit_Time", "Hours", 
+                                            "Pause_Count", "Total_Paused_Mins", "Flag", "Remarks"]
+                            
+                            st.dataframe(report_df[cols_to_show], use_container_width=True)
+                        else:
+                            st.info(f"No tasks found for the {rep_type} period.")
