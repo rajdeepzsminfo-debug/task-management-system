@@ -688,62 +688,74 @@ elif st.session_state.role == "Employee":
                             st.rerun()
 
                 # --- TAB 2: WORK HISTORY ---
-                with tab2:
-                    st.title("📊 My Work History")
-                    
-                    # Load fresh tasks
-                    df = get_tasks()
-                    
-                    # Filter for the logged-in user
-                    my_history = df[df["Employee"] == st.session_state.user].copy()
-                    
-                    if my_history.empty:
-                        st.info("No records found yet. Start your first task! 🚀")
-                    else:
-                        # IMPORTANT: Convert the 'Assign_Time' text from Sheets into real Python dates for filtering
-                        # We create a temporary column 'Assign_DT' just for this calculation
-                        my_history['Assign_DT'] = pd.to_datetime(my_history['Assign_Time'], errors='coerce')
+                    with tab2:
+                        st.title("📊 My Work History")
                         
-                        rep_type = st.radio("Select View Period", ["Daily (Today)", "Monthly (30 Days)"], horizontal=True)
+                        # Load fresh tasks
+                        df_raw = get_tasks()
                         
-                        today_start = get_now_ist().replace(hour=0, minute=0, second=0, microsecond=0)
-                        since_date = today_start if "Daily" in rep_type else (get_now_ist() - timedelta(days=30))
-                        
-                        # Apply the date filter
-                        report_df = my_history[my_history["Assign_DT"] >= since_date].copy()
-                        
-                        def get_work_hours(r):
-                            s, f = to_dt(r['Start_Time']), to_dt(r['Submit_Time'])
-                            # We subtract paused minutes from total time for accurate billable hours
-                            if s and f:
-                                total_hrs = (f - s).total_seconds() / 3600
-                                try:
-                                    p_mins = float(str(r.get("Total_Paused_Mins", 0)))
-                                except:
-                                    p_mins = 0
-                                return round(max(0, total_hrs - (p_mins / 60)), 2)
-                            return 0.0
-
-                        if not report_df.empty:
-                            # 1. Calculate work hours
-                            report_df['Hours'] = report_df.apply(get_work_hours, axis=1)
-                            
-                            # 2. Show Summary Metrics
-                            c1, c2, c3 = st.columns(3)
-                            
-                            # Ensure columns are numeric for summing
-                            p_counts = pd.to_numeric(report_df['Pause_Count'], errors='coerce').fillna(0)
-                            p_mins = pd.to_numeric(report_df['Total_Paused_Mins'], errors='coerce').fillna(0)
-                            
-                            c1.metric("Total Net Work Hours", f"{report_df['Hours'].sum():.2f} hrs")
-                            c2.metric("Total Pauses", f"{p_counts.sum():.0f}")
-                            c3.metric("Total Pause Time", f"{p_mins.sum():.2f} mins")
-                            
-                            # 3. Show Detailed Dataframe
-                            # We select only the columns that exist in the sheet
-                            cols_to_show = ["Company", "Task", "Assign_Time", "Submit_Time", "Hours", 
-                                            "Pause_Count", "Total_Paused_Mins", "Flag", "Remarks"]
-                            
-                            st.dataframe(report_df[cols_to_show], use_container_width=True)
+                        if df_raw.empty:
+                            st.info("No records found in the database.")
                         else:
-                            st.info(f"No tasks found for the {rep_type} period.")
+                            # 1. Filter for the logged-in user safely
+                            my_history = df_raw[df_raw["Employee"] == st.session_state.user].copy()
+                            
+                            if my_history.empty:
+                                st.info("No records found for your account yet.")
+                            else:
+                                # SAFETY: Convert Assign_Time to Datetime, ignoring errors (turns bad data into NaT)
+                                my_history['Assign_DT'] = pd.to_datetime(my_history['Assign_Time'], errors='coerce')
+                                
+                                # Remove any rows where the date couldn't be parsed to prevent calculation errors
+                                my_history = my_history.dropna(subset=['Assign_DT'])
+
+                                rep_type = st.radio("Select View Period", ["Daily (Today)", "Monthly (30 Days)"], horizontal=True)
+                                
+                                today_start = get_now_ist().replace(hour=0, minute=0, second=0, microsecond=0)
+                                since_date = today_start if "Daily" in rep_type else (get_now_ist() - timedelta(days=30))
+                                
+                                # Apply the date filter
+                                report_df = my_history[my_history["Assign_DT"] >= since_date].copy()
+                                
+                                # 2. Calculation Function with Type Safety
+                                def get_work_hours(r):
+                                    # Ensure Start/Submit times are strings before converting
+                                    s_str = str(r.get('Start_Time', 'N/A'))
+                                    f_str = str(r.get('Submit_Time', 'N/A'))
+                                    
+                                    s, f = to_dt(s_str), to_dt(f_str)
+                                    
+                                    if s and f:
+                                        total_hrs = (f - s).total_seconds() / 3600
+                                        try:
+                                            # Convert pause mins to float safely
+                                            p_val = r.get("Total_Paused_Mins", 0)
+                                            p_mins = float(p_val) if p_val and str(p_val).lower() != 'n/a' else 0.0
+                                        except:
+                                            p_mins = 0.0
+                                        return round(max(0, total_hrs - (p_mins / 60)), 2)
+                                    return 0.0
+
+                                if not report_df.empty:
+                                    # 3. Apply calculations
+                                    report_df['Hours'] = report_df.apply(get_work_hours, axis=1)
+                                    
+                                    # 4. Numeric Safety for Metrics
+                                    # This prevents the "TypeError" when summing columns
+                                    p_counts = pd.to_numeric(report_df['Pause_Count'], errors='coerce').fillna(0)
+                                    p_mins = pd.to_numeric(report_df['Total_Paused_Mins'], errors='coerce').fillna(0)
+                                    
+                                    c1, c2, c3 = st.columns(3)
+                                    c1.metric("Total Net Work Hours", f"{report_df['Hours'].sum():.2f} hrs")
+                                    c2.metric("Total Pauses", f"{int(p_counts.sum())}")
+                                    c3.metric("Total Pause Time", f"{p_mins.sum():.2f} mins")
+                                    
+                                    # 5. Display Columns
+                                    cols_to_show = ["Company", "Task", "Assign_Time", "Submit_Time", "Hours", 
+                                                    "Pause_Count", "Total_Paused_Mins", "Flag", "Remarks"]
+                                    
+                                    # Ensure only existing columns are requested
+                                    available_cols = [c for c in cols_to_show if c in report_df.columns]
+                                    st.dataframe(report_df[available_cols], use_container_width=True)
+                                else:
+                                    st.info(f"No tasks found for the {rep_type} period.")
