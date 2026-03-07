@@ -450,65 +450,65 @@ if st.session_state.role == "Admin":
                     st.session_state[f"is_editing_{idx}"] = True
                     st.rerun()
 
-        # --- ADMIN: USER MANAGEMENT ---
-        st.header("👥 User Management")
+                    # --- ADMIN: USER MANAGEMENT ---
+                    st.header("👥 User Management")
 
-        # 1. Create a form to add a new user
-        with st.expander("➕ Add New User"):
-            with st.form("add_user_form", clear_on_submit=True):
-                new_name = st.text_input("Full Name (Username)")
-                new_pass = st.text_input("Password")
-                new_dept = st.selectbox("Department", ["Operations", "Sales", "IT", "HR", "Finance"])
-                
-                if st.form_submit_button("Create User"):
-                    if new_name and new_pass:
-                        u_df = get_users() # This function reads your 'Users' sheet
-                        if new_name in u_df['Name'].values:
-                            st.error("User already exists!")
-                        else:
-                            # Create the new user row
-                            new_row = pd.DataFrame([{"Name": new_name, "Password": str(new_pass), "Department": new_dept}])
-                            u_df = pd.concat([u_df, new_row], ignore_index=True)
-                            save_users(u_df) # This function writes back to the sheet
-                            st.success(f"User {new_name} added successfully!")
+                    # 1. Create a form to add a new user
+                    with st.expander("➕ Add New User"):
+                        with st.form("add_user_form", clear_on_submit=True):
+                            new_name = st.text_input("Full Name (Username)")
+                            new_pass = st.text_input("Password")
+                            new_dept = st.selectbox("Department", ["Operations", "Sales", "IT", "HR", "Finance"])
+                            
+                            if st.form_submit_button("Create User"):
+                                if new_name and new_pass:
+                                    u_df = get_users() # This function reads your 'Users' sheet
+                                    if new_name in u_df['Name'].values:
+                                        st.error("User already exists!")
+                                    else:
+                                        # Create the new user row
+                                        new_row = pd.DataFrame([{"Name": new_name, "Password": str(new_pass), "Department": new_dept}])
+                                        u_df = pd.concat([u_df, new_row], ignore_index=True)
+                                        save_users(u_df) # This function writes back to the sheet
+                                        st.success(f"User {new_name} added successfully!")
+                                        st.rerun()
+
+                    st.markdown("---")
+
+                    # 2. Display the list of users with Actions
+                    st.write("#### Registered Users List")
+                    u_df = get_users()
+
+                    for i, u_row in u_df.iterrows():
+                        # Create columns for: Name, Dept, Show Password, Edit, Delete
+                        c1, c2, c3, c4, c5 = st.columns([2, 2, 1, 1, 1])
+                        
+                        c1.write(f"**{u_row['Name']}**")
+                        c2.write(f"_{u_row['Department']}_")
+                        
+                        # Show/Hide Password Toggle
+                        show_pw = c3.checkbox("👁️", key=f"show_{i}")
+                        if show_pw:
+                            c1.caption(f"Password: `{u_row['Password']}`")
+                            
+                        # Edit Button
+                        if c4.button("✏️", key=f"edit_{i}"):
+                            st.session_state[f"editing_{i}"] = True
+                            
+                        # Delete Button
+                        if c5.button("🗑️", key=f"del_{i}"):
+                            u_df = u_df.drop(i)
+                            save_users(u_df)
                             st.rerun()
 
-        st.markdown("---")
-
-        # 2. Display the list of users with Actions
-        st.write("#### Registered Users List")
-        u_df = get_users()
-
-        for i, u_row in u_df.iterrows():
-            # Create columns for: Name, Dept, Show Password, Edit, Delete
-            c1, c2, c3, c4, c5 = st.columns([2, 2, 1, 1, 1])
-            
-            c1.write(f"**{u_row['Name']}**")
-            c2.write(f"_{u_row['Department']}_")
-            
-            # Show/Hide Password Toggle
-            show_pw = c3.checkbox("👁️", key=f"show_{i}")
-            if show_pw:
-                c1.caption(f"Password: `{u_row['Password']}`")
-                
-            # Edit Button
-            if c4.button("✏️", key=f"edit_{i}"):
-                st.session_state[f"editing_{i}"] = True
-                
-            # Delete Button
-            if c5.button("🗑️", key=f"del_{i}"):
-                u_df = u_df.drop(i)
-                save_users(u_df)
-                st.rerun()
-
-            # If Edit was clicked, show an input field right below the user
-            if st.session_state.get(f"editing_{i}", False):
-                new_pw = st.text_input("Enter New Password", key=f"pw_in_{i}")
-                if st.button("Save New Password", key=f"save_{i}"):
-                    u_df.at[i, "Password"] = str(new_pw)
-                    save_users(u_df)
-                    st.session_state[f"editing_{i}"] = False
-                    st.rerun()
+                        # If Edit was clicked, show an input field right below the user
+                        if st.session_state.get(f"editing_{i}", False):
+                            new_pw = st.text_input("Enter New Password", key=f"pw_in_{i}")
+                            if st.button("Save New Password", key=f"save_{i}"):
+                                u_df.at[i, "Password"] = str(new_pw)
+                                save_users(u_df)
+                                st.session_state[f"editing_{i}"] = False
+                                st.rerun()
 
     # --- COMPANY MANAGEMENT (GSHEETS TAB VERSION) ---
     elif menu == "Company Management":
