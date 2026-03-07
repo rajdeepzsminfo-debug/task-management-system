@@ -664,7 +664,9 @@ elif st.session_state.role == "Employee":
                             
                             # --- THE FIX: Convert String to Datetime safely ---
                             p_start_val = row.get("Pause_Start", "N/A")
-                            p_start = to_dt(str(p_start_val)) 
+                            p_start = None
+                            if p_start_val != "N/A":
+                                p_start = to_dt(str(p_start_val))
                             
                             now = get_now_ist()
                             
