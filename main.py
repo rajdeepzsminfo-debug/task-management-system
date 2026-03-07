@@ -653,56 +653,46 @@ elif st.session_state.role == "Employee":
                 elif row["Status"] == "Paused":
                     st.warning("☕ TASK PAUSED")
                     if st.button("▶️ RESUME", key=f"r_{idx}", use_container_width=True):
-                        # Fetch fresh data from the cloud
                         df = get_tasks()
-                        
-                        # Match the specific row using Employee and Assign_Time
                         match_idx = df[(df['Employee'] == row['Employee']) & (df['Assign_Time'] == row['Assign_Time'])].index
                         
                         if not match_idx.empty:
                             target_idx = match_idx[0]
                             
-                            # --- THE FIX: Convert String to Datetime safely ---
+                            # 1. Get current time and STRIP timezone info (.replace(tzinfo=None))
+                            now = get_now_ist().replace(tzinfo=None)
+                            
+                            # 2. Get pause start and convert to datetime
                             p_start_val = row.get("Pause_Start", "N/A")
-
-                            # Change: Directly convert and validate in one step to ensure it's not a string during subtraction
-                            p_start = to_dt(str(p_start_val)) if p_start_val != "N/A" else None
-
-                            now = get_now_ist()
-
-                            # Only perform math if p_start is a valid datetime object
-                            if p_start and isinstance(p_start, datetime):
-                                pause_dur = now - p_start  # This will no longer throw a TypeError
+                            p_start = to_dt(str(p_start_val))
                             
-                            now = get_now_ist()
+                            # 3. If p_start has timezone info, STRIP it too
+                            if p_start and p_start.tzinfo is not None:
+                                p_start = p_start.replace(tzinfo=None)
                             
-                            # Check if p_start is a valid datetime object before math
+                            # 4. Now the subtraction is 100% safe
                             if p_start and isinstance(p_start, datetime):
                                 pause_dur = now - p_start
                                 mins_paused = pause_dur.total_seconds() / 60
                                 
                                 try:
-                                    # Convert existing total pause time to float safely
                                     prev_total = row.get("Total_Paused_Mins", 0)
                                     current_total = float(str(prev_total)) if prev_total and str(prev_total) != "N/A" else 0.0
                                 except:
                                     current_total = 0.0
                                     
-                                # Update total paused minutes in the dataframe
                                 df.at[target_idx, "Total_Paused_Mins"] = str(round(current_total + mins_paused, 2))
                                 
-                                # Push the deadline forward by the duration of the pause
-                                old_deadline_val = row.get("Deadline", "N/A")
-                                old_deadline = to_dt(str(old_deadline_val))
-                                
+                                # Apply same logic to Deadline update
+                                old_deadline = to_dt(str(row.get("Deadline", "N/A")))
                                 if old_deadline:
+                                    # Strip deadline timezone to match pause_dur
+                                    old_deadline = old_deadline.replace(tzinfo=None)
                                     new_deadline = old_deadline + pause_dur
                                     df.at[target_idx, "Deadline"] = new_deadline.strftime("%Y-%m-%d %I:%M:%S %p")
                             
-                            # Reset status and clear pause start time
                             df.at[target_idx, "Status"] = "Running"
                             df.at[target_idx, "Pause_Start"] = "N/A"
-                            
                             save_tasks(df)
                             st.rerun()
 
