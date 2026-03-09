@@ -387,8 +387,8 @@ if st.session_state.role == "Admin":
             with st.form("add_user_form", clear_on_submit=True):
                 new_u = st.text_input("Username").strip()
                 new_p = st.text_input("Password", type="password").strip()
-                new_d = st.selectbox("Department", ["Operations", "Sales", "IT", "HR", "Finance", "Management"])
-                new_r = st.selectbox("System Role", ["Employee", "Admin"])
+                new_d = st.selectbox("Department", ["Book Keeping", "Notice", "TAX", "Payroll", "IT", "CRM", "Accountant"])
+                new_r = st.selectbox("System Role", ["Employee"])
                 
                 if st.form_submit_button("Create Account"):
                     if new_u and new_p:
@@ -709,3 +709,4 @@ elif st.session_state.role == "Employee":
                             )
                         else:
                             st.info("No tasks found for this period.")
+
