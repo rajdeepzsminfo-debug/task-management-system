@@ -519,7 +519,7 @@ elif st.session_state.role == "Employee":
                                 var_sec = int((f_dt - d_dt).total_seconds())
                                 abs_v = abs(var_sec)
                                 v_str = f"{'+' if var_sec > 0 else '-'}{abs_v//60:02d}:{abs_v%60:02d}"
-                                flag = "🟢 GREEN" if var_sec <= 0 else "🔴 RED"
+                                flag = " GREEN" if var_sec <= 0 else "RED"
                                 
                                 # Atomic Update to Supabase
                                 supabase.table("tasks").update({
