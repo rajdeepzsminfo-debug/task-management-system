@@ -432,14 +432,15 @@ elif st.session_state.role == "Employee":
             if active_tasks.empty:
                 st.info("No active tasks for today. Take a breather! ☕")
             else:
-                for _, row in active_tasks.iterrows():
+                for idx, row in active_tasks.iterrows(): # Added 'idx' here
                     emp_name = row['Employee']
                     comp_name = row['Company']
                     task_name = row['Task']
+                    task_date = row['Scheduled_Date'] # Use the date for extra safety
                     
-                    # SANITIZED ID: Create a unique key for Streamlit widgets
-                    # Removing spaces/special chars to ensure the key is a valid identifier
-                    btn_id = f"{emp_name}_{comp_name}_{hash(task_name)}".replace(" ", "_").replace(".", "")
+                    # NEW SECURE KEY: Includes the dataframe index (idx) to ensure 
+                    # that even duplicate tasks have unique button IDs.
+                    btn_id = f"{emp_name}_{comp_name}_{idx}".replace(" ", "_").replace(".", "")
 
                     with st.container(border=True):
                         c_top1, c_top2 = st.columns([3, 1])
