@@ -21,6 +21,33 @@ ADMIN_PASSWORD = "admin123"
 # --- GLOBAL REFRESH (Every 60 Seconds) ---
 st_autorefresh(interval=60000, key="datarefresh")
 
+def handle_recurring_tasks(row):
+    """
+    Resets a finished recurring task back to Pending status 
+    so it appears for the employee again.
+    """
+    try:
+        # Get identifying details from the row
+        emp = row["Employee"]
+        comp = row["Company"]
+        task_name = row["Task"]
+        
+        # Reset the specific task in Supabase
+        supabase.table("tasks").update({
+            "Status": "Pending",
+            "Start_Time": None,
+            "Submit_Time": None,
+            "Pause_Start": "N/A",
+            "Pause_Count": 0,
+            "Total_Paused_Mins": "0",
+            "Time_Variance": None,
+            "Flag": None,
+            "Remarks": None
+        }).eq("Employee", emp).eq("Company", comp).eq("Task", task_name).execute()
+        
+    except Exception as e:
+        st.error(f"Failed to reset recurring task: {e}")
+
 # ==========================================
 # 2. LOGIC HELPERS
 # ==========================================
@@ -409,7 +436,13 @@ elif st.session_state.role == "Employee":
                 st.info("No active tasks for today. Take a breather! ☕")
             else:
                 for _, row in active_tasks.iterrows():
-                    row_id = row['id']
+                    emp_name = row['Employee']
+                    comp_name = row['Company']
+                    task_name = row['Task']
+                    btn_id = f"{emp_name}_{comp_name}_{task_name}".replace(" ", "_").replace(".", "")
+
+                    # Use these to create a unique key for Streamlit buttons
+                    unique_key = f"{emp_name}_{comp_name}_{task_name}".replace(" ", "_")
                     with st.container(border=True):
                         c_top1, c_top2 = st.columns([3, 1])
                         c_top1.subheader(f"🏢 {row['Company']}")
@@ -418,9 +451,9 @@ elif st.session_state.role == "Employee":
 
                 # --- STATE: PENDING ---
                 if row["Status"] == "Pending":
-                    if st.button("▶️ START TASK", key=f"start_{row_id}", use_container_width=True, type="primary"):
+                    # Changed key from row_id to btn_id
+                    if st.button("▶️ START TASK", key=f"start_{btn_id}", use_container_width=True, type="primary"):
                         start_now = get_now_ist().replace(tzinfo=None)
-                        # UPDATED: Direct numeric conversion with fallback to prevent 22P02
                         try:
                             l_mins = int(row.get("Limit_Mins", 15))
                         except (ValueError, TypeError):
@@ -428,12 +461,12 @@ elif st.session_state.role == "Employee":
                         
                         deadline = start_now + timedelta(minutes=l_mins)
                         
-                        # UPDATED: Matches exact casing in DB
+                        # UPDATED: Filter by Triple Identifiers instead of ID
                         supabase.table("tasks").update({
                             "Start_Time": start_now.isoformat(),
                             "Deadline": deadline.isoformat(),
                             "Status": "Running"
-                        }).eq("id", row_id).execute()
+                        }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
                         
                         st.cache_data.clear()
                         st.rerun()
@@ -441,33 +474,32 @@ elif st.session_state.role == "Employee":
                 # --- STATE: RUNNING ---
                 elif row["Status"] == "Running":
                     render_timer(row["Deadline"])
-
                     col_p, col_f = st.columns(2)
                     
-                    if col_p.button("⏸️ PAUSE", key=f"pause_{row_id}", use_container_width=True):
+                    # Changed key from row_id to btn_id
+                    if col_p.button("⏸️ PAUSE", key=f"pause_{btn_id}", use_container_width=True):
                         p_start = get_now_ist().isoformat()
-                        # UPDATED: Match "Pause_Count" casing
                         p_count = int(row.get("Pause_Count", 0) or 0)
                         
+                        # UPDATED: Filter by Triple Identifiers
                         supabase.table("tasks").update({
                             "Pause_Start": p_start,
                             "Status": "Paused",
                             "Pause_Count": p_count + 1
-                        }).eq("id", row_id).execute()
+                        }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
                         
                         st.cache_data.clear()
                         st.rerun()
 
-                    if col_f.button("✅ FINISH", key=f"fin_init_{row_id}", use_container_width=True):
-                        # Capture finish time immediately to prevent "Timer Creep"
-                        st.session_state[f"finish_time_{row_id}"] = get_now_ist().isoformat()
-                        st.session_state[f"finish_mode_{row_id}"] = True
+                    if col_f.button("✅ FINISH", key=f"fin_init_{btn_id}", use_container_width=True):
+                        st.session_state[f"finish_mode_{btn_id}"] = True
                         st.rerun()
 
                 # --- SUBMISSION FORM ---
-                if st.session_state.get(f"finish_mode_{row_id}", False):
-                    with st.form(key=f"form_{row_id}"):
-                        frozen_time = st.session_state.get(f"finish_time_{row_id}")
+                if st.session_state.get(f"finish_mode_{btn_id}", False):
+                    with st.form(key=f"form_{btn_id}"):
+                        # Replaces frozen_time logic using btn_id
+                        frozen_time = st.session_state.get(f"finish_time_{btn_id}")
                         f_dt_display = to_dt(frozen_time)
                         display_str = f_dt_display.strftime('%I:%M %p') if f_dt_display else "Now"
                         st.info(f"Submitting at: {display_str}")
@@ -478,30 +510,26 @@ elif st.session_state.role == "Employee":
                             f_dt = to_dt(frozen_time).replace(tzinfo=None)
                             d_dt = to_dt(row["Deadline"]).replace(tzinfo=None)
                             
-                            # Variance Math
                             var_sec = int((f_dt - d_dt).total_seconds())
                             abs_v = abs(var_sec)
                             v_str = f"{'+' if var_sec > 0 else '-'}{abs_v//3600:02d}:{(abs_v%3600)//60:02d}"
-                            
-                            # Clean string flags for database stability
                             flag = "GREEN" if var_sec <= 0 else "RED"
                             
-                            # UPDATED: Explicit string/int types for columns
+                            # UPDATED: Filter by Triple Identifiers
                             supabase.table("tasks").update({
                                 "Status": "Finished",
                                 "Submit_Time": f_dt.isoformat(),
                                 "Time_Variance": v_str,
                                 "Flag": flag,
                                 "Remarks": remarks.strip()
-                            }).eq("id", row_id).execute()
+                            }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
                             
-                            # Recurring logic
                             if row.get("Frequency") != "Once":
                                 handle_recurring_tasks(row)
                             
                             st.cache_data.clear()
-                            if f"finish_mode_{row_id}" in st.session_state:
-                                del st.session_state[f"finish_mode_{row_id}"]
+                            if f"finish_mode_{btn_id}" in st.session_state:
+                                del st.session_state[f"finish_mode_{btn_id}"]
                             st.success("Task Logged Successfully!")
                             time.sleep(1)
                             st.rerun()
@@ -509,64 +537,27 @@ elif st.session_state.role == "Employee":
                 # --- STATUS LOGIC: PAUSED ---
                 elif row["Status"] == "Paused":
                     st.warning("☕ Status: On Break")
-                    if st.button("▶️ RESUME TASK", key=f"res_{row_id}", use_container_width=True, type="primary"):
+                    # Changed key to btn_id
+                    if st.button("▶️ RESUME TASK", key=f"res_{btn_id}", use_container_width=True, type="primary"):
                         now = get_now_ist().replace(tzinfo=None)
-                        # UPDATED: Exact casing "Pause_Start"
                         p_start = to_dt(row.get("Pause_Start"))
                         
                         if p_start:
                             p_start = p_start.replace(tzinfo=None)
                             pause_dur = now - p_start
-                            
-                            # Calculate new deadline
                             old_deadline = to_dt(row.get("Deadline")).replace(tzinfo=None)
                             new_deadline = old_deadline + pause_dur
                             
-                            # UPDATED: Match "Total_Paused_Mins" and handle string-to-float
                             prev_p = float(str(row.get("Total_Paused_Mins") or 0.0))
                             new_p_total = prev_p + (pause_dur.total_seconds() / 60)
                             
+                            # UPDATED: Filter by Triple Identifiers
                             supabase.table("tasks").update({
                                 "Total_Paused_Mins": str(round(new_p_total, 2)),
                                 "Deadline": new_deadline.isoformat(),
                                 "Status": "Running",
                                 "Pause_Start": "N/A"
-                            }).eq("id", row_id).execute()
+                            }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
                             
                             st.cache_data.clear()
                             st.rerun()
-
-                # --- TAB 2: WORK HISTORY ---
-                with tab2:
-                    st.title("📊 My Work History")
-                    df_history = get_tasks()
-                    
-                    if not df_history.empty:
-                        my_history = df_history[df_history["Employee"] == st.session_state.user].copy()
-                        
-                        if not my_history.empty:
-                            period = st.radio("View Period", ["Today", "All Time"], horizontal=True)
-                            now_ist = get_now_ist().replace(tzinfo=None)
-                            
-                            # UPDATED: Match "Scheduled_Date"
-                            if period == "Today":
-                                today_str = now_ist.strftime("%Y-%m-%d")
-                                report_df = my_history[my_history["Scheduled_Date"] == today_str].copy()
-                            else:
-                                report_df = my_history.copy()
-
-                            if not report_df.empty:
-                                finished_tasks = report_df[report_df["Status"] == "Finished"]
-                                m1, m2 = st.columns(2)
-                                m1.metric("Tasks Completed", len(finished_tasks))
-                                m2.metric("Latest Variance", finished_tasks['Time_Variance'].iloc[0] if not finished_tasks.empty else "N/A")
-                                
-                                st.divider()
-                                
-                                st.dataframe(
-                                    report_df.sort_values("id", ascending=False)[["Company", "Task", "Status", "Time_Variance", "Flag", "Remarks"]],
-                                    use_container_width=True,
-                                    hide_index=True
-                                )
-                            else:
-                                st.info("No records for this period.")
