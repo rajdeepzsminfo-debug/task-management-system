@@ -453,23 +453,28 @@ elif st.session_state.role == "Employee":
                 if row["Status"] == "Pending":
                     # Changed key from row_id to btn_id
                     if st.button("▶️ START TASK", key=f"start_{btn_id}", use_container_width=True, type="primary"):
-                        start_now = get_now_ist().replace(tzinfo=None)
-                        try:
-                            l_mins = int(row.get("Limit_Mins", 15))
-                        except (ValueError, TypeError):
-                            l_mins = 15
-                        
-                        deadline = start_now + timedelta(minutes=l_mins)
-                        
-                        # UPDATED: Filter by Triple Identifiers instead of ID
+                    # Format time to a string that PostgreSQL definitely accepts
+                        start_now = get_now_ist().strftime("%Y-%m-%dT%H:%M:%S") 
+                    
+                    try:
+                        # 15-minute default limit calculation
+                        limit = int(row.get("Limit_Mins", 15))
+                        deadline_dt = get_now_ist() + timedelta(minutes=limit)
+                        deadline_str = deadline_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+                        # --- THE UPDATE ---
                         supabase.table("tasks").update({
-                            "Start_Time": start_now.isoformat(),
-                            "Deadline": deadline.isoformat(),
+                            "Start_Time": start_now,
+                            "Deadline": deadline_str,
                             "Status": "Running"
                         }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
-                        
+
                         st.cache_data.clear()
                         st.rerun()
+
+                    except Exception as e:
+                        # This will show you exactly which column is the problem
+                        st.error(f"⚠️ Connection Error: {str(e)}")
 
                 # --- STATE: RUNNING ---
                 elif row["Status"] == "Running":
