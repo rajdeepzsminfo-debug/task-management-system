@@ -349,7 +349,7 @@ if st.session_state.role == "Admin":
                 st.info("No companies registered yet.")
 
         with tab_b:
-            st.subheader("Total Billings (Finished Tasks)")
+            st.subheader("Total Billings (Finished tasks)")
             t_df = get_tasks()
             c_df = get_companies()
             
