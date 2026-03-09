@@ -80,22 +80,10 @@ def render_timer(deadline_str):
 # ==========================================
 
 @st.cache_data(ttl=60) # Reduced TTL for better responsiveness with 80 users
-def get_tasks(): 
-    """Fetches live tasks from Supabase."""
-    try:
-        response = supabase.table("tasks").select("*").execute()
-        df = pd.DataFrame(response.data)
-        if df.empty:
-            return pd.DataFrame(columns=TASK_COLS)
-        
-        # Keep original logic: fillna and ensure Remarks exists
-        df = df.fillna("N/A")
-        if "Remarks" not in df.columns:
-            df["Remarks"] = ""
-        return df
-    except Exception as e:
-        st.error(f"DB Fetch Error: {e}")
-        return pd.DataFrame(columns=TASK_COLS)
+def get_tasks():
+    # Points to your 'tasks' table
+    response = supabase.table("tasks").select("*").execute()
+    return pd.DataFrame(response.data)
 
 def save_tasks_new_row(new_row_dict):
     """Inserts a single new task into Supabase."""
@@ -105,24 +93,15 @@ def save_tasks_new_row(new_row_dict):
     except Exception as e:
         st.error(f"Error saving task: {e}")
 
-@st.cache_data(ttl=600)
-def get_users(): 
-    """Fetches users from Supabase."""
+def get_users():
+    # Points to your new 'users' table
     response = supabase.table("users").select("*").execute()
-    df = pd.DataFrame(response.data)
-    if df.empty:
-        return pd.DataFrame(columns=USER_COLS)
-    return df.astype(str)
+    return pd.DataFrame(response.data)
 
-@st.cache_data(ttl=600)
 def get_companies():
-    """Fetches companies from Supabase."""
+    # Points to your new 'companies' table
     response = supabase.table("companies").select("*").execute()
-    df = pd.DataFrame(response.data)
-    if df.empty:
-        return pd.DataFrame(columns=COMPANY_COLS)
-    return df
-
+    return pd.DataFrame(response.data)    
 # ==========================================
 # 4. LOGIN & ADMIN INTERFACE (PARTIAL)
 # ==========================================
