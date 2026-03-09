@@ -249,7 +249,7 @@ if st.session_state.role == "Admin":
                 st.info("No tasks found for the selected filters.")
             else:
                 for _, row in df.iterrows():
-                    row_id = row['id'] 
+                    row_id = row['Employee'] + "_" + row['Company'] + "_" + str(row['Task'])[:30]  # Unique identifier for buttons
                     # UPDATED: Using exact capitalized column names for display
                     with st.expander(f"{row['Status']} | {row['Employee']} - {str(row['Task'])[:30]}..."):
                         c1, c2, c3 = st.columns([3, 2, 2])
