@@ -67,18 +67,21 @@ def get_tasks():
 
 def get_users():
     try:
-        # Matches your SQL schema: "Username", "Password", "Role", "Department"
         response = supabase.table("users").select("*").execute()
+        if not response.data:
+            st.warning("Connection successful, but 'users' table is empty.")
         return pd.DataFrame(response.data)
-    except Exception:
+    except Exception as e:
+        st.error(f"Supabase Error (Users): {e}")
         return pd.DataFrame()
 
 def get_companies():
     try:
-        # Matches your SQL: "Company Name", "Hourly Rate"
+        # Use quotes if the table name has spaces or special characters
         response = supabase.table("companies").select("*").execute()
         return pd.DataFrame(response.data)
-    except Exception:
+    except Exception as e:
+        st.error(f"Supabase Error (Companies): {e}")
         return pd.DataFrame()
 
 # ==========================================
