@@ -4,6 +4,6 @@ openpyxl
 streamlit-autorefresh
 pytz
 supabase
-gspread
+
 
 
