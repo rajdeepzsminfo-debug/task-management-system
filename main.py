@@ -463,7 +463,7 @@ elif st.session_state.role == "Employee":
                                         "Start_Time": start_now,
                                         "Deadline": deadline_str,
                                         "Status": "Running"
-                                    }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
+                                    }).eq("id", row["id"]).execute() # Use the unique ID
 
                                     st.cache_data.clear()
                                     st.rerun()
@@ -481,11 +481,12 @@ elif st.session_state.role == "Employee":
                                 p_count = int(row.get("Pause_Count", 0) or 0)
                                 
                                 # UPDATED: Filter by Triple Identifiers
+                                # UPDATED: Target only this specific task ID
                                 supabase.table("tasks").update({
                                     "Pause_Start": p_start,
                                     "Status": "Paused",
                                     "Pause_Count": p_count + 1
-                                }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
+                                }).eq("id", row["id"]).execute()
                                 
                                 st.cache_data.clear()
                                 st.rerun()
@@ -550,13 +551,13 @@ elif st.session_state.role == "Employee":
                                     prev_p = float(str(row.get("Total_Paused_Mins") or 0.0))
                                     new_p_total = prev_p + (pause_dur.total_seconds() / 60)
                                     
-                                    # UPDATED: Filter by Triple Identifiers
+                                    # UPDATED: Using row["id"] instead of Triple Filter
                                     supabase.table("tasks").update({
                                         "Total_Paused_Mins": str(round(new_p_total, 2)),
                                         "Deadline": new_deadline.isoformat(),
                                         "Status": "Running",
                                         "Pause_Start": "N/A"
-                                    }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
+                                    }).eq("id", row["id"]).execute()
                                     
                                     st.cache_data.clear()
                                     st.rerun()
