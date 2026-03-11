@@ -602,10 +602,10 @@ elif st.session_state.role == "Employee":
                                     
                                     # FIXED: Using unique ID for the update
                                     supabase.table("tasks").update({
-                                        "Total_Paused_Mins": str(round(new_p_total, 2)),
+                                        "Total_Paused_Mins": float(round(new_p_total, 2)), # Convert to float
                                         "Deadline": new_deadline.isoformat(),
                                         "Status": "Running",
-                                        "Pause_Start": "N/A"
+                                        "Pause_Start": None # Use None instead of "N/A" for a timestamp/null column
                                     }).eq("id", row["id"]).execute()
                                     
                                     st.cache_data.clear()
