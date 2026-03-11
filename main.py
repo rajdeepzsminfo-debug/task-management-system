@@ -410,153 +410,153 @@ if st.session_state.role == "Admin":
                     st.dataframe(report[["Company", "Employee", "Task", "Hours", "Total Billable"]], use_container_width=True)
                 else:
                     st.info("No finished tasks found to generate revenue report.")
-            # ==========================================
-            # 4. EMPLOYEE VIEW
-            # ==========================================
-            elif st.session_state.role == "Employee":
-                tab1, tab2 = st.tabs(["🚀 Active Tasks", "📜 My Reports"])
-                
-                with tab1:
-                    st.title(f"👷 {st.session_state.user}'s Workspace")
-                    df = get_tasks()
-                    now_ist = get_now_ist()
-                    today_str = now_ist.strftime("%Y-%m-%d")
+# ==========================================
+# 4. EMPLOYEE VIEW
+# ==========================================
+elif st.session_state.role == "Employee":
+    tab1, tab2 = st.tabs(["🚀 Active Tasks", "📜 My Reports"])
+    
+    with tab1:
+        st.title(f"👷 {st.session_state.user}'s Workspace")
+        df = get_tasks()
+        now_ist = get_now_ist()
+        today_str = now_ist.strftime("%Y-%m-%d")
+        
+        if not df.empty:
+            active_tasks = df[
+                (df["Employee"] == st.session_state.user) & 
+                (df["Status"] != "Finished") &
+                (df["Scheduled_Date"] <= today_str)
+            ].copy()
+            
+            if active_tasks.empty:
+                st.info("No active tasks for today. Take a breather! ☕")
+            else:
+                for idx, row in active_tasks.iterrows(): # Added 'idx' here
+                    emp_name = row['Employee']
+                    comp_name = row['Company']
+                    task_name = row['Task']
+                    task_date = row['Scheduled_Date'] # Use the date for extra safety
                     
-                    if not df.empty:
-                        active_tasks = df[
-                            (df["Employee"] == st.session_state.user) & 
-                            (df["Status"] != "Finished") &
-                            (df["Scheduled_Date"] <= today_str)
-                        ].copy()
-                        
-                        if active_tasks.empty:
-                            st.info("No active tasks for today. Take a breather! ☕")
-                        else:
-                            for idx, row in active_tasks.iterrows(): # Added 'idx' here
-                                emp_name = row['Employee']
-                                comp_name = row['Company']
-                                task_name = row['Task']
-                                task_date = row['Scheduled_Date'] # Use the date for extra safety
+                    # NEW SECURE KEY: Includes the dataframe index (idx) to ensure 
+                    # that even duplicate tasks have unique button IDs.
+                    btn_id = f"{emp_name}_{comp_name}_{idx}".replace(" ", "_").replace(".", "")
+
+                    with st.container(border=True):
+                        c_top1, c_top2 = st.columns([3, 1])
+                        c_top1.subheader(f"🏢 {comp_name}")
+                        c_top2.write(f"⏱️ **Limit: {row['Limit_Mins']}m**")
+                        st.write(f"**Task Details:** {task_name}")
+
+                        # --- STATE: PENDING ---
+                        if row["Status"] == "Pending":
+                            if st.button("▶️ START TASK", key=f"start_{btn_id}", use_container_width=True, type="primary"):
+                                start_now = get_now_ist().strftime("%Y-%m-%dT%H:%M:%S") 
                                 
-                                # NEW SECURE KEY: Includes the dataframe index (idx) to ensure 
-                                # that even duplicate tasks have unique button IDs.
-                                btn_id = f"{emp_name}_{comp_name}_{idx}".replace(" ", "_").replace(".", "")
+                                try:
+                                    limit = int(row.get("Limit_Mins", 15))
+                                    deadline_dt = get_now_ist() + timedelta(minutes=limit)
+                                    deadline_str = deadline_dt.strftime("%Y-%m-%dT%H:%M:%S")
 
-                                with st.container(border=True):
-                                    c_top1, c_top2 = st.columns([3, 1])
-                                    c_top1.subheader(f"🏢 {comp_name}")
-                                    c_top2.write(f"⏱️ **Limit: {row['Limit_Mins']}m**")
-                                    st.write(f"**Task Details:** {task_name}")
+                                    # UPDATED: Filter by Triple Identifiers
+                                    supabase.table("tasks").update({
+                                        "Start_Time": start_now,
+                                        "Deadline": deadline_str,
+                                        "Status": "Running"
+                                    }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
 
-                                    # --- STATE: PENDING ---
-                                    if row["Status"] == "Pending":
-                                        if st.button("▶️ START TASK", key=f"start_{btn_id}", use_container_width=True, type="primary"):
-                                            start_now = get_now_ist().strftime("%Y-%m-%dT%H:%M:%S") 
-                                            
-                                            try:
-                                                limit = int(row.get("Limit_Mins", 15))
-                                                deadline_dt = get_now_ist() + timedelta(minutes=limit)
-                                                deadline_str = deadline_dt.strftime("%Y-%m-%dT%H:%M:%S")
+                                    st.cache_data.clear()
+                                    st.rerun()
 
-                                                # UPDATED: Filter by Triple Identifiers
-                                                supabase.table("tasks").update({
-                                                    "Start_Time": start_now,
-                                                    "Deadline": deadline_str,
-                                                    "Status": "Running"
-                                                }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
+                                except Exception as e:
+                                    st.error(f"⚠️ Connection Error: {str(e)}")
 
-                                                st.cache_data.clear()
-                                                st.rerun()
+                        # --- STATE: RUNNING ---
+                        elif row["Status"] == "Running":
+                            render_timer(row["Deadline"])
+                            col_p, col_f = st.columns(2)
+                            
+                            if col_p.button("⏸️ PAUSE", key=f"pause_{btn_id}", use_container_width=True):
+                                p_start = get_now_ist().isoformat()
+                                p_count = int(row.get("Pause_Count", 0) or 0)
+                                
+                                # UPDATED: Filter by Triple Identifiers
+                                supabase.table("tasks").update({
+                                    "Pause_Start": p_start,
+                                    "Status": "Paused",
+                                    "Pause_Count": p_count + 1
+                                }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
+                                
+                                st.cache_data.clear()
+                                st.rerun()
 
-                                            except Exception as e:
-                                                st.error(f"⚠️ Connection Error: {str(e)}")
+                            if col_f.button("✅ FINISH", key=f"fin_init_{btn_id}", use_container_width=True):
+                                # Freeze the current time for the submission form
+                                st.session_state[f"finish_time_{btn_id}"] = get_now_ist().isoformat()
+                                st.session_state[f"finish_mode_{btn_id}"] = True
+                                st.rerun()
 
-                                    # --- STATE: RUNNING ---
-                                    elif row["Status"] == "Running":
-                                        render_timer(row["Deadline"])
-                                        col_p, col_f = st.columns(2)
-                                        
-                                        if col_p.button("⏸️ PAUSE", key=f"pause_{btn_id}", use_container_width=True):
-                                            p_start = get_now_ist().isoformat()
-                                            p_count = int(row.get("Pause_Count", 0) or 0)
-                                            
-                                            # UPDATED: Filter by Triple Identifiers
-                                            supabase.table("tasks").update({
-                                                "Pause_Start": p_start,
-                                                "Status": "Paused",
-                                                "Pause_Count": p_count + 1
-                                            }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
-                                            
-                                            st.cache_data.clear()
-                                            st.rerun()
+                        # --- SUBMISSION FORM ---
+                        if st.session_state.get(f"finish_mode_{btn_id}", False):
+                            with st.form(key=f"form_{btn_id}"):
+                                frozen_time = st.session_state.get(f"finish_time_{btn_id}")
+                                f_dt_display = to_dt(frozen_time)
+                                display_str = f_dt_display.strftime('%I:%M %p') if f_dt_display else "Now"
+                                st.info(f"Submitting at: {display_str}")
+                                
+                                remarks = st.text_area("What was done?", placeholder="Enter work summary...")
+                                
+                                if st.form_submit_button("Submit to Admin"):
+                                    f_dt = to_dt(frozen_time).replace(tzinfo=None)
+                                    d_dt = to_dt(row["Deadline"]).replace(tzinfo=None)
+                                    
+                                    var_sec = int((f_dt - d_dt).total_seconds())
+                                    abs_v = abs(var_sec)
+                                    v_str = f"{'+' if var_sec > 0 else '-'}{abs_v//3600:02d}:{(abs_v%3600)//60:02d}"
+                                    flag = "GREEN" if var_sec <= 0 else "RED"
+                                    
+                                    # UPDATED: Filter by Triple Identifiers
+                                    supabase.table("tasks").update({
+                                        "Status": "Finished",
+                                        "Submit_Time": f_dt.isoformat(),
+                                        "Time_Variance": v_str,
+                                        "Flag": flag,
+                                        "Remarks": remarks.strip()
+                                    }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
+                                    
+                                    if row.get("Frequency") != "Once":
+                                        handle_recurring_tasks(row)
+                                    
+                                    st.cache_data.clear()
+                                    if f"finish_mode_{btn_id}" in st.session_state:
+                                        del st.session_state[f"finish_mode_{btn_id}"]
+                                    st.success("Task Logged Successfully!")
+                                    time.sleep(1)
+                                    st.rerun()
 
-                                        if col_f.button("✅ FINISH", key=f"fin_init_{btn_id}", use_container_width=True):
-                                            # Freeze the current time for the submission form
-                                            st.session_state[f"finish_time_{btn_id}"] = get_now_ist().isoformat()
-                                            st.session_state[f"finish_mode_{btn_id}"] = True
-                                            st.rerun()
-
-                                    # --- SUBMISSION FORM ---
-                                    if st.session_state.get(f"finish_mode_{btn_id}", False):
-                                        with st.form(key=f"form_{btn_id}"):
-                                            frozen_time = st.session_state.get(f"finish_time_{btn_id}")
-                                            f_dt_display = to_dt(frozen_time)
-                                            display_str = f_dt_display.strftime('%I:%M %p') if f_dt_display else "Now"
-                                            st.info(f"Submitting at: {display_str}")
-                                            
-                                            remarks = st.text_area("What was done?", placeholder="Enter work summary...")
-                                            
-                                            if st.form_submit_button("Submit to Admin"):
-                                                f_dt = to_dt(frozen_time).replace(tzinfo=None)
-                                                d_dt = to_dt(row["Deadline"]).replace(tzinfo=None)
-                                                
-                                                var_sec = int((f_dt - d_dt).total_seconds())
-                                                abs_v = abs(var_sec)
-                                                v_str = f"{'+' if var_sec > 0 else '-'}{abs_v//3600:02d}:{(abs_v%3600)//60:02d}"
-                                                flag = "GREEN" if var_sec <= 0 else "RED"
-                                                
-                                                # UPDATED: Filter by Triple Identifiers
-                                                supabase.table("tasks").update({
-                                                    "Status": "Finished",
-                                                    "Submit_Time": f_dt.isoformat(),
-                                                    "Time_Variance": v_str,
-                                                    "Flag": flag,
-                                                    "Remarks": remarks.strip()
-                                                }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
-                                                
-                                                if row.get("Frequency") != "Once":
-                                                    handle_recurring_tasks(row)
-                                                
-                                                st.cache_data.clear()
-                                                if f"finish_mode_{btn_id}" in st.session_state:
-                                                    del st.session_state[f"finish_mode_{btn_id}"]
-                                                st.success("Task Logged Successfully!")
-                                                time.sleep(1)
-                                                st.rerun()
-
-                                    # --- STATUS LOGIC: PAUSED ---
-                                    elif row["Status"] == "Paused":
-                                        st.warning("☕ Status: On Break")
-                                        if st.button("▶️ RESUME TASK", key=f"res_{btn_id}", use_container_width=True, type="primary"):
-                                            now = get_now_ist().replace(tzinfo=None)
-                                            p_start = to_dt(row.get("Pause_Start"))
-                                            
-                                            if p_start:
-                                                p_start = p_start.replace(tzinfo=None)
-                                                pause_dur = now - p_start
-                                                old_deadline = to_dt(row.get("Deadline")).replace(tzinfo=None)
-                                                new_deadline = old_deadline + pause_dur
-                                                
-                                                prev_p = float(str(row.get("Total_Paused_Mins") or 0.0))
-                                                new_p_total = prev_p + (pause_dur.total_seconds() / 60)
-                                                
-                                                # UPDATED: Filter by Triple Identifiers
-                                                supabase.table("tasks").update({
-                                                    "Total_Paused_Mins": str(round(new_p_total, 2)),
-                                                    "Deadline": new_deadline.isoformat(),
-                                                    "Status": "Running",
-                                                    "Pause_Start": "N/A"
-                                                }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
-                                                
-                                                st.cache_data.clear()
-                                                st.rerun()
+                        # --- STATUS LOGIC: PAUSED ---
+                        elif row["Status"] == "Paused":
+                            st.warning("☕ Status: On Break")
+                            if st.button("▶️ RESUME TASK", key=f"res_{btn_id}", use_container_width=True, type="primary"):
+                                now = get_now_ist().replace(tzinfo=None)
+                                p_start = to_dt(row.get("Pause_Start"))
+                                
+                                if p_start:
+                                    p_start = p_start.replace(tzinfo=None)
+                                    pause_dur = now - p_start
+                                    old_deadline = to_dt(row.get("Deadline")).replace(tzinfo=None)
+                                    new_deadline = old_deadline + pause_dur
+                                    
+                                    prev_p = float(str(row.get("Total_Paused_Mins") or 0.0))
+                                    new_p_total = prev_p + (pause_dur.total_seconds() / 60)
+                                    
+                                    # UPDATED: Filter by Triple Identifiers
+                                    supabase.table("tasks").update({
+                                        "Total_Paused_Mins": str(round(new_p_total, 2)),
+                                        "Deadline": new_deadline.isoformat(),
+                                        "Status": "Running",
+                                        "Pause_Start": "N/A"
+                                    }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
+                                    
+                                    st.cache_data.clear()
+                                    st.rerun()
