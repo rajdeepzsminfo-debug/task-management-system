@@ -23,16 +23,11 @@ st_autorefresh(interval=60000, key="datarefresh")
 
 def handle_recurring_tasks(row):
     """
-    Resets a finished recurring task back to Pending status 
-    so it appears for the employee again.
+    Resets a finished recurring task back to Pending status.
+    Uses the unique ID to ensure precision.
     """
     try:
-        # Get identifying details from the row
-        emp = row["Employee"]
-        comp = row["Company"]
-        task_name = row["Task"]
-        
-        # UPDATED: Replaced .eq("id") with Triple Filter
+        # UPDATED: Now targets the unique row ID
         supabase.table("tasks").update({
             "Status": "Pending",
             "Start_Time": None,
@@ -43,7 +38,7 @@ def handle_recurring_tasks(row):
             "Time_Variance": None,
             "Flag": None,
             "Remarks": None
-        }).eq("Employee", emp).eq("Company", comp).eq("Task", task_name).execute()
+        }).eq("id", row["id"]).execute() # FIX: Targeting by ID
         
     except Exception as e:
         st.error(f"Failed to reset recurring task: {e}")
@@ -251,28 +246,38 @@ if st.session_state.role == "Admin":
                     task_name = row['Task']
                     
                     # Create a unique key for Streamlit widgets using a string combo
-                    row_key = f"{emp_name}_{comp_name}_{hash(task_name)}"
+                    row_key = f"admin_{row['id']}"
 
                     with st.expander(f"{row['Status']} | {emp_name} - {str(task_name)[:30]}..."):
                         c1, c2, c3 = st.columns([3, 2, 2])
-                        with c1:
-                            st.write(f"**Task:** {task_name}")
-                            st.caption(f"Company: {comp_name} | Assigned: {row['Assign_Time']}")
-                        with c2:
-                            st.write(f"**Status:** {row['Status']}")
-                            st.write(f"**Goal:** {row['Limit_Mins']} mins")
-                        
                         with c3:
                             if st.button("✏️ Edit", key=f"edit_{row_key}"):
                                 st.session_state[f"editing_{row_key}"] = True
                             
                             if st.button("🗑️ Delete", key=f"del_{row_key}"):
-                                # UPDATED: Replaced .eq("id") with Triple Filter
-                                supabase.table("tasks").delete().eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
+                                # UPDATED: Use unique ID for deletion
+                                supabase.table("tasks").delete().eq("id", row["id"]).execute() 
                                 st.cache_data.clear()
                                 st.toast("Task Deleted")
                                 time.sleep(0.5)
                                 st.rerun()
+                
+                    if st.session_state.get(f"editing_{row_key}", False):
+                        st.markdown("---")
+                        new_mins = st.number_input("Adjust Mins", value=int(row['Limit_Mins']), key=f"min_{row_key}")
+                        new_stat = st.selectbox("Force Status", ["Pending", "Running", "Paused", "Finished"], key=f"stat_{row_key}")
+                        
+                        if st.button("💾 Save Changes", key=f"save_{row_key}", use_container_width=True):
+                            # UPDATED: Use unique ID for updating
+                            supabase.table("tasks").update({
+                                "Limit_Mins": int(new_mins),
+                                "Status": new_stat
+                            }).eq("id", row["id"]).execute() 
+                            
+                            st.session_state[f"editing_{row_key}"] = False
+                            st.cache_data.clear()
+                            st.success("Updated!")
+                            st.rerun()
                         
                         # Inline Editing Logic
                         if st.session_state.get(f"editing_{row_key}", False):
