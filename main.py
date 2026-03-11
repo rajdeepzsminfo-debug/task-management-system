@@ -220,14 +220,18 @@ if st.session_state.role == "Admin":
     
     elif menu == "Live Reports":
         st.title("📊 Live Monitoring & Reports")
-        df = get_tasks()
     
-    # --- FILTERS ---
+    # 1. FETCH DATA FIRST
+    df = get_tasks() 
+    
+    # 2. CREATE FILTERS (Now df exists, so this won't error)
     f1, f2, f3 = st.columns(3)
     with f1: 
         target_day = st.date_input("Filter Date", get_now_ist())
     
+    # This line was failing because df was missing or empty
     emp_list = df['Employee'].unique().tolist() if not df.empty else []
+    
     with f2: 
         emp_f = st.multiselect("Filter Employee", emp_list)
     with f3: 
