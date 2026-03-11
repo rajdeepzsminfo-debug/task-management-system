@@ -8,6 +8,7 @@ from streamlit_autorefresh import st_autorefresh
 from datetime import datetime, timedelta
 import pytz
 import time
+import io
 
 st.set_page_config(page_title="ZSM Task Control", layout="wide", page_icon="🚩")
 
