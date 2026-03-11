@@ -8,7 +8,6 @@ from streamlit_autorefresh import st_autorefresh
 from datetime import datetime, timedelta
 import pytz
 import time
-import io
 
 st.set_page_config(page_title="ZSM Task Control", layout="wide", page_icon="🚩")
 
@@ -19,29 +18,21 @@ supabase: Client = create_client(url, key)
 
 ADMIN_PASSWORD = "admin123" 
 
-def format_to_ist_12h(iso_str):
-    if not iso_str or iso_str == "NULL":
-        return "N/A"
-    try:
-        # Convert string to datetime object
-        dt = pd.to_datetime(iso_str)
-        # Ensure it is in IST (UTC+5:30)
-        ist_dt = dt.astimezone(pytz.timezone('Asia/Kolkata'))
-        # Return 12-hour format: DD-MM-YYYY hh:mm:ss AM/PM
-        return ist_dt.strftime('%d-%m-%Y %I:%M:%S %p')
-    except:
-        return iso_str  # Return original string if parsing fails
-
 # --- GLOBAL REFRESH (Every 60 Seconds) ---
 st_autorefresh(interval=60000, key="datarefresh")
 
 def handle_recurring_tasks(row):
     """
-    Resets a finished recurring task back to Pending status.
-    Uses the unique ID to ensure precision.
+    Resets a finished recurring task back to Pending status 
+    so it appears for the employee again.
     """
     try:
-        # UPDATED: Targeting the unique row ID to prevent duplicates
+        # Get identifying details from the row
+        emp = row["Employee"]
+        comp = row["Company"]
+        task_name = row["Task"]
+        
+        # UPDATED: Replaced .eq("id") with Triple Filter
         supabase.table("tasks").update({
             "Status": "Pending",
             "Start_Time": None,
@@ -52,7 +43,7 @@ def handle_recurring_tasks(row):
             "Time_Variance": None,
             "Flag": None,
             "Remarks": None
-        }).eq("id", row["id"]).execute() 
+        }).eq("Employee", emp).eq("Company", comp).eq("Task", task_name).execute()
         
     except Exception as e:
         st.error(f"Failed to reset recurring task: {e}")
@@ -95,9 +86,9 @@ def render_timer(deadline_str):
 # 3. DATABASE HELPERS (SUPABASE)
 # ==========================================
 
-# NOTE: Reduced TTL to 10 seconds so deleted tasks disappear much faster
-@st.cache_data(ttl=10) 
+@st.cache_data(ttl=30) 
 def get_tasks():
+    # Ensure lowercase table name matches sidebar screenshot
     response = supabase.table("tasks").select("*").execute()
     return pd.DataFrame(response.data)
 
@@ -218,146 +209,72 @@ if st.session_state.role == "Admin":
                 st.success(f"Task assigned to {real_name}!")
                 st.rerun()
     
+    # --- MENU 2: LIVE REPORTS ---
     elif menu == "Live Reports":
         st.title("📊 Live Monitoring & Reports")
-    
-    # 1. FETCH DATA FIRST
-    df = get_tasks() 
-    
-    # 2. CREATE FILTERS (Now df exists, so this won't error)
-    f1, f2, f3 = st.columns(3)
-    with f1: 
-        target_day = st.date_input("Filter Date", get_now_ist())
-    
-    # This line was failing because df was missing or empty
-    emp_list = df['Employee'].unique().tolist() if not df.empty else []
-    
-    with f2: 
-        emp_f = st.multiselect("Filter Employee", emp_list)
-    with f3: 
-        stat_f = st.multiselect("Filter Status", ["Pending", "Running", "Paused", "Finished"])
-
-    if not df.empty:
-        # Filter Logic
-        df = df[df['Scheduled_Date'] == target_day.strftime("%Y-%m-%d")]
-        if emp_f: df = df[df['Employee'].isin(emp_f)]
-        if stat_f: df = df[df['Status'].isin(stat_f)]
-
-        # --- EXCEL EXPORT (Formatted for Human Reading) ---
-        # We create a copy for the export so the background data remains clean
-        export_df = df.copy()
-        time_cols_for_export = ["Assign_Time", "Start_Time", "Deadline", "Submit_Time"]
-        for col in time_cols_for_export:
-            if col in export_df.columns:
-                export_df[col] = export_df[col].apply(format_to_ist_12h)
-
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            export_df.to_excel(writer, index=False, sheet_name='TaskReport')
+        df = get_tasks()
         
-        st.download_button(label="📥 Download as Excel (IST Format)", 
-                           data=buffer.getvalue(),
-                           file_name=f"ZSM_Report_{target_day}.xlsx",
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                           use_container_width=True)
-
-        st.divider()
+        f1, f2, f3 = st.columns(3)
+        with f1: target_day = st.date_input("Filter Date", get_now_ist())
         
-        if df.empty:
-            st.info("No tasks found for the selected filters.")
-        else:
-            for _, row in df.iterrows():
-                row_id = row['id']
-                
-                # Format Assign Time for the display label
-                readable_assign = format_to_ist_12h(row['Assign_Time'])
-                
-                with st.expander(f"{row['Status']} | {row['Employee']} - {str(row['Task'])[:30]}..."):
-                    c1, c2, c3 = st.columns([3, 2, 2])
-                    with c1:
-                        st.write(f"**Task:** {row['Task']}")
-                        # UI showing the clean Indian time
-                        st.caption(f"Company: {row['Company']} | Assigned: {readable_assign}")
-                    with c2:
-                        st.write(f"**Status:** {row['Status']}")
-                        st.write(f"**Goal:** {row['Limit_Mins']} mins")
-                    
-                    with c3:
-                        if st.button("✏️ Edit", key=f"edit_{row_id}"):
-                            st.session_state[f"editing_{row_id}"] = True
-                        
-                        if st.button("🗑️ Delete", key=f"del_{row_id}"):
-                            supabase.table("tasks").delete().eq("id", row_id).execute()
-                            st.cache_data.clear()
-                            st.toast("Task Deleted")
-                            time.sleep(0.5)
-                            st.rerun()
-                    
-                    # --- EDIT MODE ---
-                    if st.session_state.get(f"editing_{row_id}", False):
-                        st.markdown("---")
-                        new_mins = st.number_input("Adjust Mins", value=int(row['Limit_Mins']), key=f"min_{row_id}")
-                        
-                        # Fix for potential index errors if status is non-standard
-                        valid_stats = ["Pending", "Running", "Paused", "Finished"]
-                        current_stat = row['Status'] if row['Status'] in valid_stats else "Pending"
-                        
-                        new_stat = st.selectbox("Force Status", valid_stats, 
-                                             index=valid_stats.index(current_stat), key=f"stat_{row_id}")
-                        
-                        se1, se2 = st.columns(2)
-                        with se1:
-                            if st.button("💾 Save Changes", key=f"save_{row_id}", use_container_width=True):
-                                supabase.table("tasks").update({
-                                    "Limit_Mins": int(new_mins),
-                                    "Status": new_stat
-                                }).eq("id", row_id).execute()
-                                
-                                st.session_state[f"editing_{row_id}"] = False
-                                st.cache_data.clear()
-                                st.success("Updated Successfully!")
-                                time.sleep(0.5)
-                                st.rerun()
-                        with se2:
-                            if st.button("Cancel", key=f"can_{row_id}", use_container_width=True):
-                                st.session_state[f"editing_{row_id}"] = False
-                                st.rerun()
+        # UPDATED: Match exact column "Employee"
+        emp_list = df['Employee'].unique().tolist() if not df.empty else []
+        with f2: emp_f = st.multiselect("Filter Employee", emp_list)
+        with f3: stat_f = st.multiselect("Filter Status", ["Pending", "Running", "Paused", "Finished"])
+
+        if not df.empty:
+            # Apply Filters (matching "Scheduled_Date", "Employee", "Status")
+            df = df[df['Scheduled_Date'] == target_day.strftime("%Y-%m-%d")]
+            if emp_f: df = df[df['Employee'].isin(emp_f)]
+            if stat_f: df = df[df['Status'].isin(stat_f)]
+
+            # Excel Export logic
+            import io
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='TaskReport')
+            
+            st.download_button(label="📥 Download as Excel", data=buffer.getvalue(),
+                               file_name=f"ZSM_Report_{target_day}.xlsx",
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               use_container_width=True)
+
             st.divider()
             
             if df.empty:
                 st.info("No tasks found for the selected filters.")
             else:
                 for _, row in df.iterrows():
-                    # IDENTIFIERS
+                    # IDENTIFIERS: Extracting variables for the Triple Filter
                     emp_name = row['Employee']
                     comp_name = row['Company']
                     task_name = row['Task']
                     
-                    # Create a unique key for Streamlit widgets using the database ID
-                    row_key = f"admin_{row['id']}"
+                    # Create a unique key for Streamlit widgets using a string combo
+                    row_key = f"{emp_name}_{comp_name}_{hash(task_name)}"
 
                     with st.expander(f"{row['Status']} | {emp_name} - {str(task_name)[:30]}..."):
                         c1, c2, c3 = st.columns([3, 2, 2])
                         with c1:
                             st.write(f"**Task:** {task_name}")
-                            st.caption(f"Company: {comp_name}")
+                            st.caption(f"Company: {comp_name} | Assigned: {row['Assign_Time']}")
                         with c2:
+                            st.write(f"**Status:** {row['Status']}")
                             st.write(f"**Goal:** {row['Limit_Mins']} mins")
-                            st.write(f"**Current:** {row['Status']}")
-                            
+                        
                         with c3:
                             if st.button("✏️ Edit", key=f"edit_{row_key}"):
                                 st.session_state[f"editing_{row_key}"] = True
                             
                             if st.button("🗑️ Delete", key=f"del_{row_key}"):
-                                # FIXED: Using unique ID for precision
-                                supabase.table("tasks").delete().eq("id", row["id"]).execute() 
+                                # UPDATED: Replaced .eq("id") with Triple Filter
+                                supabase.table("tasks").delete().eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
                                 st.cache_data.clear()
                                 st.toast("Task Deleted")
                                 time.sleep(0.5)
                                 st.rerun()
                         
-                        # --- INLINE EDITING LOGIC ---
+                        # Inline Editing Logic
                         if st.session_state.get(f"editing_{row_key}", False):
                             st.markdown("---")
                             new_mins = st.number_input("Adjust Mins", value=int(row['Limit_Mins']), key=f"min_{row_key}")
@@ -368,11 +285,11 @@ if st.session_state.role == "Admin":
                             se1, se2 = st.columns(2)
                             with se1:
                                 if st.button("💾 Save Changes", key=f"save_{row_key}", use_container_width=True):
-                                    # FIXED: Using unique ID for updating to avoid affecting duplicates
+                                    # UPDATED: Replaced .eq("id") with Triple Filter
                                     supabase.table("tasks").update({
                                         "Limit_Mins": int(new_mins),
                                         "Status": new_stat
-                                    }).eq("id", row["id"]).execute() 
+                                    }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
                                     
                                     st.session_state[f"editing_{row_key}"] = False
                                     st.cache_data.clear()
@@ -425,6 +342,7 @@ if st.session_state.role == "Admin":
                 st.warning(f"User {user_to_del} removed.")
                 time.sleep(1)
                 st.rerun()
+
     # --- MENU 4: COMPANY & REVENUE ---
     elif menu == "Companies":
         st.title("🏢 Company & Revenue Management")
@@ -472,7 +390,6 @@ if st.session_state.role == "Admin":
                 finished = t_df[t_df["Status"] == "Finished"].copy()
                 
                 if not finished.empty:
-                    # Clean the data
                     c_df["Hourly Rate"] = pd.to_numeric(c_df["Hourly Rate"], errors='coerce').fillna(0)
                     
                     def calc_hours(r):
@@ -493,7 +410,6 @@ if st.session_state.role == "Admin":
                     st.dataframe(report[["Company", "Employee", "Task", "Hours", "Total Billable"]], use_container_width=True)
                 else:
                     st.info("No finished tasks found to generate revenue report.")
-
 # ==========================================
 # 4. EMPLOYEE VIEW
 # ==========================================
@@ -507,7 +423,6 @@ elif st.session_state.role == "Employee":
         today_str = now_ist.strftime("%Y-%m-%d")
         
         if not df.empty:
-            # Filter tasks for the logged-in employee that are not finished
             active_tasks = df[
                 (df["Employee"] == st.session_state.user) & 
                 (df["Status"] != "Finished") &
@@ -517,14 +432,15 @@ elif st.session_state.role == "Employee":
             if active_tasks.empty:
                 st.info("No active tasks for today. Take a breather! ☕")
             else:
-                for idx, row in active_tasks.iterrows():
-                    # IDENTIFIERS
-                    row_id = row['id']
+                for idx, row in active_tasks.iterrows(): # Added 'idx' here
+                    emp_name = row['Employee']
                     comp_name = row['Company']
                     task_name = row['Task']
+                    task_date = row['Scheduled_Date'] # Use the date for extra safety
                     
-                    # UNIQUE KEY for Streamlit components
-                    btn_id = f"task_{row_id}"
+                    # NEW SECURE KEY: Includes the dataframe index (idx) to ensure 
+                    # that even duplicate tasks have unique button IDs.
+                    btn_id = f"{emp_name}_{comp_name}_{idx}".replace(" ", "_").replace(".", "")
 
                     with st.container(border=True):
                         c_top1, c_top2 = st.columns([3, 1])
@@ -536,22 +452,24 @@ elif st.session_state.role == "Employee":
                         if row["Status"] == "Pending":
                             if st.button("▶️ START TASK", key=f"start_{btn_id}", use_container_width=True, type="primary"):
                                 start_now = get_now_ist().strftime("%Y-%m-%dT%H:%M:%S") 
+                                
                                 try:
                                     limit = int(row.get("Limit_Mins", 15))
                                     deadline_dt = get_now_ist() + timedelta(minutes=limit)
                                     deadline_str = deadline_dt.strftime("%Y-%m-%dT%H:%M:%S")
 
-                                    # FIXED: Targeting specific ID to avoid starting duplicate tasks
+                                    # UPDATED: Filter by Triple Identifiers
                                     supabase.table("tasks").update({
                                         "Start_Time": start_now,
                                         "Deadline": deadline_str,
                                         "Status": "Running"
-                                    }).eq("id", row_id).execute()
+                                    }).eq("id", row["id"]).execute() # Use the unique ID
 
                                     st.cache_data.clear()
                                     st.rerun()
+
                                 except Exception as e:
-                                    st.error(f"⚠️ Error starting task: {str(e)}")
+                                    st.error(f"⚠️ Connection Error: {str(e)}")
 
                         # --- STATE: RUNNING ---
                         elif row["Status"] == "Running":
@@ -562,18 +480,19 @@ elif st.session_state.role == "Employee":
                                 p_start = get_now_ist().isoformat()
                                 p_count = int(row.get("Pause_Count", 0) or 0)
                                 
-                                # FIXED: Targeting specific ID
+                                # UPDATED: Filter by Triple Identifiers
+                                # UPDATED: Target only this specific task ID
                                 supabase.table("tasks").update({
-                                    "Total_Paused_Mins": str(round(new_p_total, 2)), # This stays text as per your screenshot
-                                    "Deadline": new_deadline.isoformat(),
-                                    "Status": "Running",
-                                    "Pause_Start": None  # <--- Use None (SQL NULL) instead of "N/A"
+                                    "Pause_Start": p_start,
+                                    "Status": "Paused",
+                                    "Pause_Count": p_count + 1
                                 }).eq("id", row["id"]).execute()
                                 
                                 st.cache_data.clear()
                                 st.rerun()
 
                             if col_f.button("✅ FINISH", key=f"fin_init_{btn_id}", use_container_width=True):
+                                # Freeze the current time for the submission form
                                 st.session_state[f"finish_time_{btn_id}"] = get_now_ist().isoformat()
                                 st.session_state[f"finish_mode_{btn_id}"] = True
                                 st.rerun()
@@ -592,29 +511,26 @@ elif st.session_state.role == "Employee":
                                     f_dt = to_dt(frozen_time).replace(tzinfo=None)
                                     d_dt = to_dt(row["Deadline"]).replace(tzinfo=None)
                                     
-                                    # Variance Calculation
                                     var_sec = int((f_dt - d_dt).total_seconds())
                                     abs_v = abs(var_sec)
                                     v_str = f"{'+' if var_sec > 0 else '-'}{abs_v//3600:02d}:{(abs_v%3600)//60:02d}"
                                     flag = "GREEN" if var_sec <= 0 else "RED"
                                     
-                                    # FIXED: Using unique ID for the final submission
+                                    # UPDATED: Filter by Triple Identifiers
                                     supabase.table("tasks").update({
                                         "Status": "Finished",
                                         "Submit_Time": f_dt.isoformat(),
-                                        "Time_Variance": str(v_str), # Ensure this matches your DB column type (text)
+                                        "Time_Variance": v_str,
                                         "Flag": flag,
-                                        "Remarks": remarks.strip() if remarks else "" 
-                                    }).eq("id", row["id"]).execute()
+                                        "Remarks": remarks.strip()
+                                    }).eq("Employee", emp_name).eq("Company", comp_name).eq("Task", task_name).execute()
                                     
-                                    # Handle Recurring Tasks logic
                                     if row.get("Frequency") != "Once":
                                         handle_recurring_tasks(row)
                                     
                                     st.cache_data.clear()
                                     if f"finish_mode_{btn_id}" in st.session_state:
                                         del st.session_state[f"finish_mode_{btn_id}"]
-                                    
                                     st.success("Task Logged Successfully!")
                                     time.sleep(1)
                                     st.rerun()
@@ -629,21 +545,18 @@ elif st.session_state.role == "Employee":
                                 if p_start:
                                     p_start = p_start.replace(tzinfo=None)
                                     pause_dur = now - p_start
-                                    
-                                    # Calculate new deadline by pushing it forward by the pause duration
                                     old_deadline = to_dt(row.get("Deadline")).replace(tzinfo=None)
                                     new_deadline = old_deadline + pause_dur
                                     
-                                    # Calculate cumulative pause time
                                     prev_p = float(str(row.get("Total_Paused_Mins") or 0.0))
                                     new_p_total = prev_p + (pause_dur.total_seconds() / 60)
                                     
-                                    # FIXED: Using unique ID for the update
+                                    # UPDATED: Using row["id"] instead of Triple Filter
                                     supabase.table("tasks").update({
-                                        "Total_Paused_Mins": float(round(new_p_total, 2)), # Convert to float
+                                        "Total_Paused_Mins": str(round(new_p_total, 2)),
                                         "Deadline": new_deadline.isoformat(),
                                         "Status": "Running",
-                                        "Pause_Start": None # Use None instead of "N/A" for a timestamp/null column
+                                        "Pause_Start": "N/A"
                                     }).eq("id", row["id"]).execute()
                                     
                                     st.cache_data.clear()
