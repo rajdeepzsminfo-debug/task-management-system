@@ -497,7 +497,7 @@ elif st.session_state.role == "Employee":
                             
                             if col_p.button("⏸️ PAUSE", key=f"pause_{btn_id}", use_container_width=True):
                                 p_start = get_now_ist().isoformat()
-                                p_count = int(row.get("Pause_Count", 0) or 0)
+                                 p_count = int(row.get("Pause_Count", 0) or 0)
                                 
                                 supabase.table("tasks").update({
                                     "Pause_Start": p_start,
@@ -635,3 +635,4 @@ elif st.session_state.role == "Employee":
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
+
