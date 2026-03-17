@@ -496,15 +496,21 @@ elif st.session_state.role == "Employee":
                             col_p, col_f = st.columns(2)
                             
                             if col_p.button("⏸️ PAUSE", key=f"pause_{btn_id}", use_container_width=True):
-                                p_start = get_now_ist().isoformat()
-                                p_count = int(row.get("Pause_Count", 0) or 0)
+                                # Get current time in ISO format for Supabase
+                                p_start_time = get_now_ist().isoformat()
+                                
+                                # Safety check for Pause_Count to ensure it is an integer
+                                try:
+                                    current_p_count = int(row.get("Pause_Count", 0) if row.get("Pause_Count") is not None else 0)
+                                except:
+                                    current_p_count = 0
                                 
                                 supabase.table("tasks").update({
-                                    "Pause_Start": p_start,
+                                    "Pause_Start": p_start_time,
                                     "Status": "Paused",
-                                    "Pause_Count": p_count + 1
-                                }).eq("id", row["id"]).execute()
-                                
+                                    "Pause_Count": current_p_count + 1
+                                }).eq("id", task_id).execute()
+                        
                                 st.cache_data.clear()
                                 st.rerun()
 
@@ -560,22 +566,31 @@ elif st.session_state.role == "Employee":
                                 p_start = to_dt(row.get("Pause_Start"))
                                 
                                 if p_start:
+                                    # Calculate duration of the pause
                                     pause_dur = now - p_start
+                                    
+                                    # Extend the deadline by the pause duration
                                     old_deadline = to_dt(row.get("Deadline"))
-                                    new_deadline = old_deadline + pause_dur
-                                    
-                                    prev_p = float(str(row.get("Total_Paused_Mins") or 0.0))
-                                    new_p_total = prev_p + (pause_dur.total_seconds() / 60)
-                                    
-                                    supabase.table("tasks").update({
-                                        "Total_Paused_Mins": str(round(new_p_total, 2)),
-                                        "Deadline": new_deadline.isoformat(),
-                                        "Status": "Running",
-                                        "Pause_Start": "N/A"
-                                    }).eq("id", row["id"]).execute()
-                                    
-                                    st.cache_data.clear()
-                                    st.rerun()
+                                    if old_deadline:
+                                        new_deadline = old_deadline + pause_dur
+                                        
+                                        # Handle Total_Paused_Mins safely as a float/string
+                                        try:
+                                            prev_p = float(str(row.get("Total_Paused_Mins") or 0.0))
+                                        except:
+                                            prev_p = 0.0
+                                            
+                                        new_p_total = prev_p + (pause_dur.total_seconds() / 60)
+                                        
+                                        supabase.table("tasks").update({
+                                            "Total_Paused_Mins": str(round(new_p_total, 2)),
+                                            "Deadline": new_deadline.isoformat(),
+                                            "Status": "Running",
+                                            "Pause_Start": "N/A"
+                                        }).eq("id", task_id).execute()
+                                 
+                                        st.cache_data.clear()
+                                        st.rerun()
                         with tab2:
                             st.title("📜 My Performance Reports")
         
@@ -635,4 +650,3 @@ elif st.session_state.role == "Employee":
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
-
