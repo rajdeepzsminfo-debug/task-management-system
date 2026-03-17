@@ -20,7 +20,7 @@ supabase: Client = create_client(url, key)
 ADMIN_PASSWORD = "admin123" 
 
 # --- GLOBAL REFRESH (Every 60 Seconds) ---
-st_autorefresh(interval=1000, key="timer_refresh")
+st_autorefresh(interval=60000, key="datarefresh")
 
 # ==========================================
 # 2. LOGIC HELPERS (UPDATED FOR IST & 12HR)
@@ -64,25 +64,18 @@ def calculate_working_hours(start_str, end_str):
     return 0.0
 
 def render_timer(deadline_str):
-    """Displays a live-updating countdown timer."""
+    """Displays a countdown timer in the UI."""
     try:
         now = get_now_ist()
         deadline = to_dt(deadline_str)
         if deadline:
             diff = deadline - now
-            total_seconds = int(diff.total_seconds())
-            
-            if total_seconds > 0:
-                hours, remainder = divmod(total_seconds, 3600)
+            if diff.total_seconds() > 0:
+                hours, remainder = divmod(int(diff.total_seconds()), 3600)
                 minutes, seconds = divmod(remainder, 60)
-                # Use a clear, bold display for the live timer
                 st.error(f"⏳ Time Remaining: {hours:02d}:{minutes:02d}:{seconds:02d}")
             else:
-                # Calculate how much time has passed since the deadline
-                abs_diff = abs(total_seconds)
-                h, r = divmod(abs_diff, 3600)
-                m, s = divmod(r, 60)
-                st.warning(f"⚠️ OVERDUE BY: {h:02d}:{m:02d}:{s:02d}")
+                st.warning("⚠️ Deadline Passed!")
     except Exception:
         st.error("Timer Error")
 
